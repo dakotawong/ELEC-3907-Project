@@ -1,0 +1,289 @@
+/*
+ * author: Ethan Borduas
+ * date: 01-23-2020
+ * 
+ * Maze Solving robot
+ * 
+ * Code for a robot that navigates a maze to make an internal map of the maze.
+ * The maze is represented by a plannar graph where each node is a tile on the maze
+ * 
+ * A flood fill algorithm is used to find the shortest path between two points
+ * 
+ */
+
+
+const int MAZE_X = 8;//The size of the maze in the x direction
+const int MAZE_Y = 8;//The size of the maze in the y direction
+
+/* 
+ * the structure node erpresents a tile in the maze.
+ * it has the ability to keep strack of neighbouring nodes
+ */
+ struct node {
+    bool visited;   //boolean keeping track of if the tile has been visited
+    int floodBox;   //used to keep track of how far away the tile is from a given tile
+    node* north;    //points to the node above
+    node* east;     //points to the node on the right
+    node* south;    //points to the node bellow
+    node* west;     //points to the node on the left
+};
+
+/* 
+ * a node representing a wall
+ * this node will the used to keep track of where walls are and will be used to deny pathways
+ * visited=true to avoid trying to go to it
+ * floodbox is negative to avoid pathing through it
+ * wall points to itself in all directions to avoid pathing through it
+ */
+node wall = {true, -1, &wall, &wall, &wall, &wall};
+
+node* current;//points to the current position of the robot
+node* destination;// points to where the robot is trying to go
+node* ending;// points to the end of the maze
+
+//Define constants for facing directions
+//these are absolute and are independant of the robot's current facing or direction
+int facing;
+const int NORTH = 0;
+const int EAST = 1;
+const int SOUTH = 2;
+const int WEST = 3;
+
+node maze [MAZE_X] [MAZE_Y]; //Creates an array of nodes that represent each node within the maze.
+
+ 
+void setup() {
+  initializeMaze();
+  facing = NORTH;
+}
+
+void loop() {
+}
+
+
+
+/* 
+ * Recursive function that will map the maze until all tiles are visited
+ * function will map one tile at a time before looking for the next tile
+ */
+void mapMaze(){
+  if (!current->visited) {  // if the current tile is unvisited, make it visited and map the tiles on the right, left, and in front
+    current->visited = true;
+    mapRight();
+    mapFront();
+    mapLeft();
+  }
+  if (findNextNode()){      //if the program finds another tile that needs to be visited
+    goTo(destination);
+    mapMaze();
+  }
+  else goTo(&maze[0][0]);
+}
+
+
+/* 
+ * Initializes the maze to have all nodes be unvisited and point to NULL
+ * sets the current position to position maze [0][0]. This is the starting position of the bot reguardless of where that is relative to the maze
+ */
+void initializeMaze(){
+  for (int i=0; i<MAZE_X; i++){
+    for (int j=0; j<MAZE_Y; j++){
+      maze[i][j]={false,
+                  0,
+                  NULL,
+                  NULL,
+                  NULL,
+                  NULL};
+    }
+  }
+  current = &maze [0][0];
+}
+
+
+/*
+ * The algorithm that will locate the next node to explore
+ * @return return true if a new unvisited node is located false if no new node is found if a new node is found, destination will point to that node
+ * 
+ * the algorithm scans each node for integer "flood". All bordering tiles will get "flood+1" (if they dont already have a number) 
+ * to indicate an increased distance from the origin. Once an unvisited tile has been found using this method (that tile will be one of the closest to the current location)
+ * the program will return true and point to that tile. if all available tiles have been visited the program will no longer find new tiles and will return false
+ */
+bool findNextNode(){
+  bool noNew = false; //keeps track of if a new tile is found
+  int flood = 1; //the flood count starts at 1
+  current->floodBox = flood; //current is the start of the flood
+  while (!noNew){
+    for (int i=0; i<MAZE_X; i++){   //These two for loops search each tile of the 2d array
+      for (int j=0; j<MAZE_Y; j++){ //These two for loops search each tile of the 2d array
+        if (maze[i][j].floodBox ==flood){ //Searches for a tile that has the current flood number
+          if(maze[i][j].north->visited){  //if the tile north of maze[i][j] is visited
+            if(maze[i][j].north->floodBox==0){//if the flood number of that tile is 0
+              maze[i][j].north->floodBox=flood+1; //give it the number flood+1
+            }
+          }
+          else{ //else the tile is unvisited therefore a new tile is found
+            destination = maze[i][j].north; //update destination to point to that tile
+            return true;               //return true as a new tile has been found
+          }
+          if(maze[i][j].east->visited){   //if the tile east of maze[i][j] is visited
+            if(maze[i][j].east->floodBox==0){//if the flood number of that tile is 0
+              maze[i][j].east->floodBox=flood+1;//give it the number flood+1
+            }
+          }
+          else{ //else the tile is unvisited therefore a new tile is found
+            destination = maze[i][j].east;//update destination to point to that tile
+            return true;//return true as a new tile has been found
+          }
+          if(maze[i][j].south->visited){   //if the tile south of maze[i][j] is visited
+            if(maze[i][j].south->floodBox==0){//if the flood number of that tile is 0
+              maze[i][j].south->floodBox=flood+1;//give it the number flood+1
+            }
+          }
+          else{ //else the tile is unvisited therefore a new tile is found
+            destination = maze[i][j].south;//update destination to point to that tile
+            return true;//return true as a new tile has been found
+          }
+          if(maze[i][j].west->visited){    //if the tile west of maze[i][j] is visited
+            if(maze[i][j].west->floodBox==0){//if the flood number of that tile is 0
+              maze[i][j].west->floodBox=flood+1;//give it the number flood+1
+            }
+          }
+          else{ //else the tile is unvisited therefore a new tile is found
+            destination = maze[i][j].west;//update destination to point to that tile
+            return true;//return true as a new tile has been found
+          }
+        }
+      }
+    }
+    flood++; //increment flood for next pass
+    noNew=true; //Assume nonew tile until proven otherwise
+    for (int i = 0; i<MAZE_X; i++){
+      for (int j=0; j<MAZE_Y; j++){
+        if (maze[i][j].floodBox==flood){
+          noNew=false;
+        }
+      }
+    }
+  }
+  //reset all floodboxes to 0
+  for (int i = 0; i<MAZE_X; i++){
+    for (int j = 0; j<MAZE_Y; j++){
+      maze[i][j].floodBox = 0;
+    }
+  }
+  return false;
+}
+
+/*
+ * @param aNode: the destination that is desired
+ * 
+ * will provide instructions on moving from the current position to aNode
+ * a flood will occur from the aNode position until the flood reaches the current tile
+ * this creates a path of decreasing numbers from the current node to the destination node
+ */
+void goTo(node* aNode){
+  int flood = 1;             //starting the flood at 1
+  bool aNodeFound = false;   //aNode has not been found by flood
+  aNode->floodBox = flood;   //aNode starts at 1
+  while (!aNodeFound){       //while aNode is not found by flood
+    for(int i = 0; i<MAZE_X; i++){   //gothrough all members of the array for nodes that have floodBox=flood
+      for(int j = 0; j<MAZE_Y; j++){
+        if (maze[i][j].floodBox==flood){ //if  a member of the array has the floodBox = flood we check its neighbouring tiles
+          if (maze[i][j].north!=NULL && maze[i][j].north->visited && maze[i][j].north->floodBox==0){ //check the north tile to see if it is not null, if it has been visited and is unumbered
+            maze[i][j].north->floodBox=flood+1; //if it is, assign it the next number
+          }
+          if (maze[i][j].east!=NULL && maze[i][j].east->visited && maze[i][j].east->floodBox==0){ //check the east tile to see if it is not null, if it has been visited and is unumbered
+            maze[i][j].east->floodBox=flood+1;  //if it is, assign it the next number
+          }
+          if (maze[i][j].south!=NULL && maze[i][j].south->visited && maze[i][j].south->floodBox==0){ //check the south tile to see if it is not null, if it has been visited and is unumbered
+            maze[i][j].south->floodBox=flood+1;  //if it is, assign it the next number
+          }
+          if (maze[i][j].west!=NULL && maze[i][j].west->visited && maze[i][j].west->floodBox==0){ //check the west tile to see if it is not null, if it has been visited and is unumbered
+            maze[i][j].west->floodBox=flood+1;  //if it is, assign it the next number
+          }
+        }
+      }
+    }
+    if (current->floodBox!=0){ //after going through the whole array, check to see if the current node has been found
+      aNodeFound=true; //if so, exit while loop
+    }
+  }
+  /*
+   * now that the path has been made, the path needs to be followed
+   * this is done by looking for a bordering tile with a flood number that is one lower and going to that tile
+   * by turning left/right/around then going straight
+   * this is repeated until the current tile is on the destination tile
+   */
+  for(int i = current->floodBox; i>1 ;i--){ //for each node along the path
+    if(current->north->floodBox==i-1){      //if the north node is the next one allong the path, aka the robot must go north
+      if(facing==EAST) turnLeft();          //if currently facing east, turn left
+      else if(facing==SOUTH) turnAround();  //if currently facing south, turn around
+      else if(facing==WEST) turnRight();    //if currently facing west, turn right
+      goStraight();               // go straight
+    }
+    else if(current->east->floodBox==i-1){  //if the east node is the next node allong the path, aka the robot must go east
+      if(facing==NORTH) turnRight();        //if currently facing north, turn right
+      else if(facing==SOUTH) turnLeft();    //if currently facing south, turn left
+      else if(facing==WEST) turnAround();   //if currnetly facing west, turn around
+      goStraight();              //go straight
+    } 
+    else if(current->south->floodBox==i-1){ //if the south node is the next node allong the path, aka the robot must go south
+      if(facing==NORTH) turnAround();       //if currently facing north, turn around
+      else if(facing==EAST) turnRight();    //if currenly facing east, turn right
+      else if(facing==WEST) turnLeft();     //if currently facing west, turn left
+      goStraight();           //go straight
+    }
+    else if(current->west->floodBox==i-1){  //if the west node is the nest node allong the path, aka the robot must  go west
+      if(facing==NORTH) turnLeft();         //if currently facing north, turn left
+      else if (facing==EAST) turnAround();  //if currently facing east, turn around
+      else if (facing==SOUTH) turnRight();  //if currently facing south, turn right
+      goStraight();        //go straight
+    }
+  }
+  //reset all flodBoxs to 0
+  for (int i=0; i<MAZE_X; i++){
+    for (int j=0; j<MAZE_Y; j++){
+      maze[i][j].floodBox=0;
+    }
+  }
+}
+
+void mapRight(){}
+void mapFront(){}
+void mapLeft(){}
+
+//turn the robot to face right
+void turnRight(){
+  if(facing==NORTH) facing=EAST;      //if currently facing north, face east
+  else if(facing==EAST) facing=SOUTH; //if currently facing east, face south
+  else if(facing==SOUTH) facing=WEST; //if currently facing south, face west
+  else if(facing==WEST) facing=NORTH; //if currently facing west, face north
+  //add motor function here
+  }
+//turns the robot to face left
+void turnLeft(){
+  if(facing==NORTH) facing=WEST;      //if currently facing north, face west
+  else if(facing==EAST) facing=NORTH; //if currently facing east, face north
+  else if(facing==SOUTH) facing=EAST; //if currently facing south, face east
+  else if(facing==WEST) facing=SOUTH; //if currently facing west, face south
+  //add motor function here
+}
+//rotates the robot 180 so that it faces the behind it
+void turnAround(){
+  if(facing==NORTH) facing=SOUTH;     //if currently facing north, face south
+  else if(facing==EAST) facing=WEST;  //if currently facing east, face west
+  else if(facing==SOUTH) facing=NORTH;//if currently facing south, face north
+  else if(facing==WEST) facing=EAST;  //if currently facing west, face east
+  //add motor function here
+}
+/*
+ * moves the robot in the direction that it is facing
+ * updates the current pointer to the node in the facing direction
+ */
+void goStraight(){
+  if (facing==NORTH) current=current->north;
+  else if (facing==EAST) current=current->east;
+  else if (facing==SOUTH) current=current->south;
+  else if (facing==WEST) current=current->west;
+  //add motor function here
+}
