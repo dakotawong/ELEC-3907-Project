@@ -1,0 +1,1967 @@
+#include <iostream>
+#include <stdio.h>
+/*
+ * @author: Ethan Borduas
+ * date: 02-07-2020
+ * 
+ * Maze Solving robot
+ * 
+ * Code for a robot that navigates a maze to make an internal map of the maze.
+ * The maze is represented by a plannar graph where each node is a tile on the maze
+ * 
+ * A flood fill algorithm is used to find the shortest path between two points
+ * 
+ */
+ 
+const int MAZE_X = 8;//The size of the maze in the x direction
+const int MAZE_Y = 8;//The size of the maze in the y direction
+
+
+/* 
+ * the structure node erpresents a tile in the maze.
+ * it has the ability to keep track of neighbouring nodes
+ * by pointing to them
+ */
+ struct node {
+    bool visited;   //boolean keeping track of if the tile has been visited
+    int floodBox;  //used to keep track of how far away the tile is from a given tile
+    node* north;    //points to the node above
+    node* east;     //points to the node on the right
+    node* south;    //points to the node bellow
+    node* west;     //points to the node on the left
+};
+
+/* 
+ * a node representing a wall
+ * this node will the used to keep track of where walls are and will be used to deny pathways
+ * visited=true to avoid trying to go to it
+ * floodbox is negative to avoid pathing through it
+ * wall points to itself in all directions to avoid pathing through it
+ */
+node wall = {true, -1, &wall, &wall, &wall, &wall};
+
+node* current;//points to the current position of the robot
+node* destination;// points to where the robot is trying to go
+node* ending;// points to the end of the maze
+
+//Define constants for facing directions
+//these are absolute and are independant of the robot's current facing or directionc
+char facing;
+const int NORTH = 1;
+const int EAST = 2;
+const int SOUTH = 3;
+const int WEST = 4;
+
+node maze [MAZE_X] [MAZE_Y]; //Creates an array of nodes that represent each node within the maze.
+
+node modelMaze [MAZE_X][MAZE_Y]; //this maze will be to simulate the data gathered. will not be in the main arduino file.
+
+/*
+ *this is to display the maze in the command prompt
+ *it will wait for you to enter before moving on to the next step
+ *
+ *C is to denote the current location
+ *D is to denote the destination
+ *E is to denote the ending once it is found
+ *
+ *a node with v has been visited
+ *the current direction that the robot is facing is in the top right corner
+ *
+ *Dont worry about this function, it is only here to bug fix and show the path that the robot would attempt to follow
+ *I won't add comments for this one, but if you have questions let me know and i can help you understand what is happening
+ */
+void displayMaze(node aMaze[MAZE_X][MAZE_Y]){
+	system("CLS");
+	int row;
+	for(int j=MAZE_Y-1; j>=0;j--){
+		if(j==MAZE_Y-1) row=3;
+		else row = 2;
+		while(row>=1){
+			for(int i=0; i<MAZE_X; i++){
+				if(row==3){
+					if(aMaze[i][j].north==&wall) printf("+---");
+					else printf("+   ");
+					if(i==MAZE_X-1) {
+						if(facing==NORTH) printf("North\n");
+						else if (facing==EAST) printf("East\n");
+						else if (facing==SOUTH) printf("South\n");
+						else if (facing==WEST) printf("West\n");
+					}
+				}
+				if(row==2){
+					if(aMaze[i][j].west==&wall) printf("|");
+					else printf(" ");
+					if(aMaze[i][j].visited)printf("v ");
+					else printf("  ");
+					//printf("%d",maze[i][j].floodBox);
+					if(current==&aMaze[i][j]) printf("C");
+					else if(ending==&aMaze[i][j]) printf("E");
+					else if(destination==&aMaze[i][j]) printf("D");
+					else printf(" ");
+					if(i==MAZE_X-1){
+						if(aMaze[i][j].east==&wall) printf("|\n");
+						else printf(" \n");
+					}
+				}
+				if(row==1){
+					if(aMaze[i][j].south==&wall) printf("+---");
+					else printf("+   ");
+					if(i==MAZE_X-1) printf("+\n");
+				}
+			}
+			row--;
+		}
+	}
+	system("pause");
+}
+
+/*
+ *Resets all floodBox to 0.
+ *is used after findNextNode and goTo
+ */
+void cleanFlood(){
+	for(int i=0; i<MAZE_X; i++){      //For each collumn
+		for(int j=0; j<MAZE_Y; j++){  //For each row
+			maze[i][j].floodBox=0;    //set floodBox=0;
+		}
+	}
+	//printf("floodCleaned\n"); //to show what instructions have passed
+}
+
+/*
+ *Finds the closest node that has been unvisited. 
+ *If multiple nodes are tied as closest, one is chosen as follows: the one in the most right collumn, if more than one, the lowest
+ *
+ *@return: true if a new node has been found, false if no knew node has been found
+ */
+bool findNextNode(){
+	cleanFlood();   //set all nodes in the maze to have a floodBox = 0
+	bool mapDone = false; //assume the map is not complete
+	int flood = 1;  //the flood starts at 1
+	current->floodBox=flood; //set the current location as the start of the flood
+	//printf("current set to 1\n");
+	while (!mapDone){      //while the map is incomplete
+		flood++;           //increment flood
+		/*
+		 *these for loops go through the maze a spead the flood to available nodes that are adjacent to the previous iteration of the flood
+		 *
+		 */
+		for(int i = 0; i < MAZE_X; i++){   //from left to right on the maze (west to east)
+			for(int j = 0; j < MAZE_Y; j++){    //from bottom to top in the maze (north to south)
+				if(maze[i][j].visited && maze[i][j].floodBox==flood-1){    //if a node in the maze is found to contain last iteration of flood
+					if(maze[i][j].north->floodBox==0) maze[i][j].north->floodBox=flood;   //continue to flood north if not a wall
+					if(maze[i][j].east->floodBox==0) maze[i][j].east->floodBox=flood;     //continue to flood east if not a wall
+					if(maze[i][j].south->floodBox==0) maze[i][j].south->floodBox=flood;   //continue to flood south if not a wall
+					if(maze[i][j].west->floodBox==0) maze[i][j].west->floodBox=flood;     //continue to flood west if not a wall
+					//printf("%is have been added (fnn)\n", flood);
+					//displayMaze(maze);
+				}
+			}
+		}
+		/*
+		 *these for loops will check to see if an unvisited tile has been given a flood number
+		 *
+		 */
+		mapDone=true;       //assume the map is all done
+		for(int i = 0; i < MAZE_X; i++){
+			for(int j = 0; j < MAZE_Y; j++){
+				if(maze[i][j].floodBox==flood) mapDone=false; //if the new flood number has been place, the map is not done therefore mapDone=false
+				if(maze[i][j].floodBox==flood && !maze[i][j].visited) {
+					destination=&maze[i][j];   //if an unvisited tile has been found, point the destination to it
+					//printf("destination set\n");
+					return true; // an unvisited tile has been found so we return true
+				}
+			}
+		}		
+	}
+  //printf("maze is all mapped\n");
+  return false;
+}
+
+
+/*
+ *this version of mapRight references the modelMaze to simulate recieving data from the sensors. It adds info to the maze array based on the way the robot is facing
+ */
+void mapRight(){
+	for(int i=0; i<MAZE_X; i++){
+		for(int j=0;j<MAZE_Y; j++){
+			if(&maze[i][j]==current){
+				if(facing==NORTH){
+					if(modelMaze[i][j].east!=&wall)
+						if(i==MAZE_X-1){
+							maze[i][j].east=&maze[0][j];
+							maze[0][j].west=&maze[i][j];
+						}
+						else{
+							maze[i][j].east=&maze[i+1][j];
+							maze[i+1][j].west=&maze[i][j];
+						}
+					else{
+						if(i==MAZE_X-1){
+							maze[i][j].east=&wall;
+							maze[0][j].west=&wall;
+						}
+						else{
+							maze[i][j].east=&wall;
+							maze[i+1][j].west=&wall;
+						}
+					}
+				}
+				else if(facing==EAST){
+					if(modelMaze[i][j].south!=&wall)
+						if(j==0){
+							maze[i][j].south=&maze[i][MAZE_Y-1];
+							maze[i][MAZE_Y-1].north=&maze[i][j];
+						}
+						else{
+							maze[i][j].south=&maze[i][j-1];
+							maze[i][j-1].north=&maze[i][j];
+						}
+					else{
+						if(j==0){
+							maze[i][j].south=&wall;
+							maze[i][MAZE_Y-1].north=&wall;
+						}
+						else{
+							maze[i][j].south=&wall;
+							maze[i][j-1].north=&wall;
+						}
+					}
+				}
+				else if(facing==SOUTH){
+					if(modelMaze[i][j].west!=&wall)
+						if(i==0){
+							maze[i][j].west=&maze[MAZE_X-1][j];
+							maze[MAZE_X-1][j].east=&maze[i][j];
+						}
+						else{
+							maze[i][j].west=&maze[i-1][j];
+							maze[i-1][j].east=&maze[i][j];
+						}
+					else{
+						if(i==0){
+							maze[i][j].west=&wall;
+							maze[MAZE_X-1][j].east=&wall;
+						}
+						else{
+							maze[i][j].west=&wall;
+							maze[i-1][j].east=&wall;
+						}
+					}
+				}
+				else if(facing==WEST){
+					if(modelMaze[i][j].north!=&wall)
+						if(j==MAZE_Y-1){
+							maze[i][j].north=&maze[i][0];
+							maze[i][0].south=&maze[i][j];
+						}
+						else{
+							maze[i][j].north=&maze[i][j+1];
+							maze[i][j+1].south=&maze[i][j];
+						}
+					else{
+						if(j==MAZE_X-1){
+							maze[i][j].north=&wall;
+							maze[i][0].south=&wall;
+						}
+						else{
+							maze[i][j].north=&wall;
+							maze[i][j+1].south=&wall;
+						
+						}
+					}
+				}
+			}
+		}
+	}
+//	printf("right mapped\n");
+}
+
+/*
+ *this version of mapFront references the modelMaze to simulate recieving data from the sensors. It adds info to the maze array based on the way the robot is facing
+ */
+void mapFront(){
+	for(int i=0; i<MAZE_X; i++){
+		for(int j=0;j<MAZE_Y; j++){
+			if(&maze[i][j]==current){
+				if(facing==NORTH){
+					if(modelMaze[i][j].north!=&wall)
+						if(j==MAZE_Y-1){
+							maze[i][j].north=&maze[i][0];
+							maze[i][0].south=&maze[i][j];
+						}
+						else{
+							maze[i][j].north=&maze[i][j+1];
+							maze[i][j+1].south=&maze[i][j];
+						}
+					else{
+						if(j==MAZE_X-1){
+							maze[i][j].north=&wall;
+							maze[i][0].south=&wall;
+						}
+						else{
+							maze[i][j].north=&wall;
+							maze[i][j+1].south=&wall;
+						}
+					}
+				}
+				else if(facing==EAST){
+					if(modelMaze[i][j].east!=&wall)
+						if(i==MAZE_X-1){
+							maze[i][j].east=&maze[0][j];
+							maze[0][j].west=&maze[i][j];
+						}
+						else{
+							maze[i][j].east=&maze[i+1][j];
+							maze[i+1][j].west=&maze[i][j];
+						}
+					else{
+						if(i==MAZE_X-1){
+							maze[i][j].east=&wall;
+							maze[0][j].west=&wall;
+						}
+						else{
+							maze[i][j].east=&wall;
+							maze[i+1][j].west=&wall;
+						}
+					}
+				}
+				else if(facing==SOUTH){
+					if(modelMaze[i][j].south!=&wall)
+						if(j==0){
+							maze[i][j].south=&maze[i][MAZE_Y-1];
+							maze[i][MAZE_Y-1].north=&maze[i][j];
+						}
+						else{
+							maze[i][j].south=&maze[i][j-1];
+							maze[i][j-1].north=&maze[i][j];
+						}
+					else{
+						if(j==0){
+							maze[i][j].south=&wall;
+							maze[i][MAZE_Y-1].north=&wall;
+						}
+						else{
+							maze[i][j].south=&wall;
+							maze[i][j-1].north=&wall;
+						}
+					}
+				}
+				else if(facing==WEST){
+					if(modelMaze[i][j].west!=&wall)
+						if(i==0){
+							maze[i][j].west=&maze[MAZE_X-1][j];
+							maze[MAZE_X-1][j].east=&maze[i][j];
+						}
+						else{
+							maze[i][j].west=&maze[i-1][j];
+							maze[i-1][j].east=&maze[i][j];
+						}
+					else{
+						if(i==0){
+							maze[i][j].west=&wall;
+							maze[MAZE_X-1][j].east=&wall;
+						}
+						else{
+							maze[i][j].west=&wall;
+							maze[i-1][j].east=&wall;
+						
+						}
+					}
+				}
+			}
+		}
+	}
+//	printf("front mapped\n");
+}
+
+/*
+ *this version of mapLeft references the modelMaze to simulate recieving data from the sensors. It adds info to the maze array based on the way the robot is facing
+ */
+void mapLeft(){
+	for(int i=0; i<MAZE_X; i++){
+		for(int j=0;j<MAZE_Y; j++){
+			if(&maze[i][j]==current){
+				if(facing==NORTH){
+					if(modelMaze[i][j].west!=&wall)
+						if(i==0){
+							maze[i][j].west=&maze[MAZE_X-1][j];
+							maze[MAZE_X-1][j].east=&maze[i][j];
+						}
+						else{
+							maze[i][j].west=&maze[i-1][j];
+							maze[i-1][j].east=&maze[i][j];
+						}
+					else{
+						if(i==0){
+							maze[i][j].west=&wall;
+							maze[MAZE_X-1][j].east=&wall;
+						}
+						else{
+							maze[i][j].west=&wall;
+							maze[i-1][j].east=&wall;
+						}
+					}
+				}
+				else if(facing==EAST){
+					if(modelMaze[i][j].north!=&wall)
+						if(j==MAZE_Y-1){
+							maze[i][j].north=&maze[i][0];
+							maze[i][0].south=&maze[i][j];
+						}
+						else{
+							maze[i][j].north=&maze[i][j+1];
+							maze[i][j+1].south=&maze[i][j];
+						}
+					else{
+						if(j==MAZE_X-1){
+							maze[i][j].north=&wall;
+							maze[i][0].south=&wall;
+						}
+						else{
+							maze[i][j].north=&wall;
+							maze[i][j+1].south=&wall;
+						}
+					}
+				}
+				else if(facing==SOUTH){
+					if(modelMaze[i][j].east!=&wall)
+						if(i==MAZE_X-1){
+							maze[i][j].east=&maze[0][j];
+							maze[0][j].west=&maze[i][j];
+						}
+						else{
+							maze[i][j].east=&maze[i+1][j];
+							maze[i+1][j].west=&maze[i][j];
+						}
+					else{
+						if(i==MAZE_X-1){
+							maze[i][j].east=&wall;
+							maze[0][j].west=&wall;
+						}
+						else{
+							maze[i][j].east=&wall;
+							maze[i+1][j].west=&wall;
+						}
+					}
+				}
+				else if(facing==WEST){
+					if(modelMaze[i][j].south!=&wall)
+						if(j==0){
+							maze[i][j].south=&maze[i][MAZE_Y-1];
+							maze[i][MAZE_Y-1].north=&maze[i][j];
+						}
+						else{
+							maze[i][j].south=&maze[i][j-1];
+							maze[i][j-1].north=&maze[i][j];
+						}
+					else{
+						if(j==0){
+							maze[i][j].south=&wall;
+							maze[i][MAZE_Y-1].north=&wall;
+						}
+						else{
+							maze[i][j].south=&wall;
+							maze[i][j-1].north=&wall;
+						
+						}
+					}
+				}
+			}
+		}
+	}
+//	printf("left mapped\n");
+}
+
+
+
+//turn the robot to face right
+void turnRight(){
+  if(facing==NORTH) facing=EAST;      //if currently facing north, face east
+  else if(facing==EAST) facing=SOUTH; //if currently facing east, face south
+  else if(facing==SOUTH) facing=WEST; //if currently facing south, face west
+  else if(facing==WEST) facing=NORTH; //if currently facing west, face north
+  //printf("turned right\n");
+  }
+//turns the robot to face left
+void turnLeft(){
+  if(facing==NORTH) facing=WEST;      //if currently facing north, face west
+  else if(facing==EAST) facing=NORTH; //if currently facing east, face north
+  else if(facing==SOUTH) facing=EAST; //if currently facing south, face east
+  else if(facing==WEST) facing=SOUTH; //if currently facing west, face south
+  //printf("turned left, now facing %i\n",facing);
+}
+//rotates the robot 180 so that it faces the behind it
+void turnAround(){
+  if(facing==NORTH) facing=SOUTH;     //if currently facing north, face south
+  else if(facing==EAST) facing=WEST;  //if currently facing east, face west
+  else if(facing==SOUTH) facing=NORTH;//if currently facing south, face north
+  else if(facing==WEST) facing=EAST;  //if currently facing west, face east
+  //printf("turned around\n");
+}
+/*
+ * moves the robot in the direction that it is facing
+ * updates the current pointer to the node in the facing direction
+ */
+void goStraight(){
+  if (facing==NORTH) current=current->north;
+  else if (facing==EAST) current=current->east;
+  else if (facing==SOUTH) current=current->south;
+  else if (facing==WEST) current=current->west;
+  //printf("went straight\n");
+  displayMaze(maze);
+}
+
+/*
+ * @param aNode: the destination that is desired
+ * 
+ * will provide instructions on moving from the current position to aNode
+ * a flood will occur from the aNode position until the flood reaches the current tile
+ * this creates a path of decreasing numbers from the current node to the destination node
+ */
+void goTo(node* aNode){
+	cleanFlood(); //set all floodBox to 0;
+	bool currentFound = false; //assume the current node has not been found yet
+	int flood = 1;  //this is to start the flood algorithm
+	aNode->floodBox = flood; //set aNode->floodBox=1
+	//printf("flood started at 1\n");
+	while(!currentFound){ //while the node has not been found
+		flood++; //increase flood by one
+		for(int j=0; j<MAZE_Y; j++){ //for every row
+			for(int i=0; i<MAZE_X; i++){ //for every collomn
+				if (maze[i][j].floodBox==flood-1){ //if we find a node with the last itteration of flood
+					if(maze[i][j].north->floodBox==0 && maze[i][j].north->visited) maze[i][j].north->floodBox=flood; //if the north node has been visited and has floodBox=0 (not walls) spread the flood
+					if(maze[i][j].east->floodBox==0 && maze[i][j].east->visited) maze[i][j].east->floodBox=flood;  //if the east node has been visited and has floodBox=0 (not walls) spread the flood
+					if(maze[i][j].south->floodBox==0 && maze[i][j].south->visited) maze[i][j].south->floodBox=flood;  //if the south node has been visited and has floodBox=0 (not walls) spread the flood
+					if(maze[i][j].west->floodBox==0 && maze[i][j].west->visited) maze[i][j].west->floodBox=flood;  //if the north west has been visited and has floodBox=0 (not walls) spread the flood
+					//printf("%is have been added (goto)\n", flood);
+					//displayMaze(maze);
+				}
+			}
+		}
+		//check all tiles to see if current has been found
+		for(int i=0; i<MAZE_X; i++){ //for every collumn
+			for(int j=0; j<MAZE_Y; j++){ //for every row
+				if(maze[i][j].floodBox!=0 && current==&maze[i][j]) currentFound = true; //check to see if that node is the current node, if true, currentFound=true and we break out of the while loop
+			}
+		}
+	}
+	//displayMaze(maze);
+	//now that the path is layed out, we follow the flood numbers by going to the bordering node with the flood number that is one less that the flood number that the current tile contains
+	while(current!=aNode){ //while the current position is not where we are trying to go
+		if(current->floodBox-1==current->north->floodBox){ //check to see if the next number is north
+			if(facing==EAST) turnLeft(); //if facing east turn left to face north
+			else if(facing==SOUTH) turnAround(); //if facing south turn around to face north
+			else if(facing==WEST) turnRight(); //if facing west, turn right to face north
+			goStraight();//go straight
+		}
+		else if(current->floodBox-1==current->east->floodBox){//check to see if the next number is east
+			if(facing==NORTH) turnRight(); //if facing north, turn right to face east
+			else if(facing==SOUTH) turnLeft(); //if facing south, turn left to face east
+			else if(facing==WEST) turnAround(); //if facing west, turn around to face west
+			goStraight();//go straight
+		}
+		else if(current->floodBox-1==current->south->floodBox){//check to see if the next number is south
+			if(facing==NORTH) turnAround(); //if facing north, turn around to face south
+			else if(facing==EAST) turnRight(); //if facing east, turn right to face south
+			else if(facing==WEST) turnLeft(); //if facing west, turn left to face south
+			goStraight();//go straight
+		}
+		else if(current->floodBox-1==current->west->floodBox){//check to see if the next number is west
+			if(facing==NORTH) turnLeft(); //if facing north, turn left to face west
+			else if(facing==EAST) turnAround();//if facing east, turn around to face west
+			else if(facing==SOUTH) turnRight();//if facing south, turn around to face south
+			goStraight();//go straight
+		}
+	}
+
+}
+
+
+void mapMaze(){
+  if (!current->visited) {  // if the current tile is unvisited, make it visited and map the tiles on the right, left, and in front
+    //displayMaze(maze);
+  	//tilesVisited++;
+    current->visited = true;//since we are now mapping the node, we consider it as visited
+    mapRight(); //read right sensor
+    //displayMaze(maze);
+    mapFront();//read front sensor
+    //displayMaze(maze);
+    mapLeft();//read left sensor
+    displayMaze(maze); //display the maze 
+  }
+  if (findNextNode()){      //if the program finds another tile that needs to be visited
+    displayMaze(maze);      //display the maze to show the destination
+    goTo(destination);      //go to the destination
+    mapMaze();
+  }
+  goTo(&maze[0][0]);        //once the maze is fully mapped, return to the start of the maze
+};
+
+
+/* 
+ * Initializes the maze to have all nodes be unvisited and point to the neighbouring nodes by default. We assume that until we see a wall there instead.
+ * sets the current position to position maze [0][0]. This is the starting position of the bot reguardless of where that is relative to the maze
+ */
+void initializeMaze(){
+  for (int i=0; i<MAZE_X; i++){ //for every collumn
+    for (int j=0; j<MAZE_Y; j++){ //for every row
+      maze[i][j].visited=false; //set visited to false
+	  maze[i][j].floodBox=0;  //set floodbox to 0
+	  //set the north pointer to the node above it
+	  if(j==MAZE_Y-1) maze[i][j].north=&maze[i][0]; //if at the top of the maze, reference the bottom instead
+	  else maze[i][j].north=&maze[i][j+1];          //else reference the tile above
+	  //set the east pointer to the node on the right
+	  if(i==MAZE_X-1) maze[i][j].east=&maze[0][j];  //if at the right most side of the maze, reference the left most node instead
+	  else maze[i][j].east=&maze[i+1][j];           //else reference the tile on the right
+	  //set the south pointer to the node bellow
+	  if(j==0) maze[i][j].south=&maze[i][MAZE_Y-1]; //if at the bottom of the maze, reference the top instead
+	  else maze[i][j].south=&maze[i][j-1];          //else reference the tile bellow
+	  //set the west pointer to the node on the left
+	  if(i==0) maze[i][j].west=&maze[MAZE_X-1][j];  //if at the left most side of the maze, reference the right most node instead
+	  maze[i][j].west=&maze[i-1][j];                //else reference the tile on the left
+    }
+  }
+  current = &maze [1][0];//set current position to maze[0][0], this is the internal start of the maze even if the real maze's start is not the bottom left corner
+}
+
+//setting model maze 1. This is the data for each node of the maze
+// this maze contains a loop and one tile that cannot be explored
+initializeModelMaze2(){
+	modelMaze[0][0].north=&modelMaze[0][1];
+	modelMaze[0][0].east=&modelMaze[1][0];
+	modelMaze[0][0].south=&wall;
+	modelMaze[0][0].west=&wall;
+	
+	modelMaze[1][0].north=&wall;
+	modelMaze[1][0].east=&modelMaze[2][0];
+	modelMaze[1][0].south=&wall;
+	modelMaze[1][0].west=&modelMaze[0][0];
+	
+	modelMaze[2][0].north=&wall;
+	modelMaze[2][0].east=&modelMaze[3][0];
+	modelMaze[2][0].south=&wall;
+	modelMaze[2][0].west=&modelMaze[1][0];
+	
+	modelMaze[3][0].north=&wall;
+	modelMaze[3][0].east=&modelMaze[4][0];
+	modelMaze[3][0].south=&wall;
+	modelMaze[3][0].west=&modelMaze[2][0];
+	
+	modelMaze[4][0].north=&wall;
+	modelMaze[4][0].east=&modelMaze[5][0];
+	modelMaze[4][0].south=&wall;
+	modelMaze[4][0].west=&modelMaze[3][0];
+	
+	modelMaze[5][0].north=&wall;
+	modelMaze[5][0].east=&modelMaze[6][0];
+	modelMaze[5][0].south=&wall;
+	modelMaze[5][0].west=&modelMaze[4][0];
+	
+	modelMaze[6][0].north=&wall;
+	modelMaze[6][0].east=&modelMaze[7][0];
+	modelMaze[6][0].south=&wall;
+	modelMaze[6][0].west=&modelMaze[5][0];
+	
+	modelMaze[7][0].north=&modelMaze[7][1];
+	modelMaze[7][0].east=&wall;
+	modelMaze[7][0].south=&wall;
+	modelMaze[7][0].west=&modelMaze[6][0];
+	
+	modelMaze[0][1].north=&modelMaze[0][2];
+	modelMaze[0][1].east=&wall;
+	modelMaze[0][1].south=&modelMaze[0][0];
+	modelMaze[0][1].west=&wall;
+	
+	modelMaze[1][1].north=&modelMaze[1][2];
+	modelMaze[1][1].east=&modelMaze[2][1];
+	modelMaze[1][1].south=&wall;
+	modelMaze[1][1].west=&wall;
+	
+	modelMaze[2][1].north=&wall;
+	modelMaze[2][1].east=&modelMaze[3][1];
+	modelMaze[2][1].south=&wall;
+	modelMaze[2][1].west=&modelMaze[1][1];
+	
+	modelMaze[3][1].north=&wall;
+	modelMaze[3][1].east=&modelMaze[4][1];
+	modelMaze[3][1].south=&wall;
+	modelMaze[3][1].west=&modelMaze[2][1];
+	
+	modelMaze[4][1].north=&modelMaze[4][2];
+	modelMaze[4][1].east=&modelMaze[5][1];
+	modelMaze[4][1].south=&modelMaze[4][0];
+	modelMaze[4][1].west=&modelMaze[3][1];
+	
+	modelMaze[5][1].north=&wall;
+	modelMaze[5][1].east=&modelMaze[6][1];
+	modelMaze[5][1].south=&wall;
+	modelMaze[5][1].west=&modelMaze[4][1];
+	
+	modelMaze[6][1].north=&modelMaze[6][2];
+	modelMaze[6][1].east=&wall;
+	modelMaze[6][1].south=&wall;
+	modelMaze[6][1].west=&modelMaze[5][1];
+	
+	modelMaze[7][1].north=&modelMaze[7][2];
+	modelMaze[7][1].east=&wall;
+	modelMaze[7][1].south=&modelMaze[7][0];
+	modelMaze[7][1].west=&wall;
+	
+	modelMaze[0][2].north=&modelMaze[0][3];
+	modelMaze[0][2].east=&wall;
+	modelMaze[0][2].south=&modelMaze[0][1];
+	modelMaze[0][2].west=&wall;
+	
+	modelMaze[1][2].north=&modelMaze[1][3];
+	modelMaze[1][2].east=&wall;
+	modelMaze[1][2].south=&modelMaze[1][1];
+	modelMaze[1][2].west=&wall;
+	
+	modelMaze[2][2].north=&modelMaze[2][3];
+	modelMaze[2][2].east=&modelMaze[3][2];
+	modelMaze[2][2].south=&wall;
+	modelMaze[2][2].west=&wall;
+	
+	modelMaze[3][2].north=&wall;
+	modelMaze[3][2].east=&modelMaze[4][2];
+	modelMaze[3][2].south=&wall;
+	modelMaze[3][2].west=&modelMaze[2][2];
+	
+	modelMaze[4][2].north=&modelMaze[4][3];
+	modelMaze[4][2].east=&modelMaze[5][2];
+	modelMaze[4][2].south=&modelMaze[4][1];
+	modelMaze[4][2].west=&modelMaze[3][2];
+	
+	modelMaze[5][2].north=&modelMaze[5][3];
+	modelMaze[5][2].east=&wall;
+	modelMaze[5][2].south=&wall;
+	modelMaze[5][2].west=&modelMaze[4][2];
+	
+	modelMaze[6][2].north=&modelMaze[6][3];
+	modelMaze[6][2].east=&wall;
+	modelMaze[6][2].south=&modelMaze[6][1];
+	modelMaze[6][2].west=&wall;
+	
+	modelMaze[7][2].north=&modelMaze[7][3];
+	modelMaze[7][2].east=&wall;
+	modelMaze[7][2].south=&modelMaze[7][1];
+	modelMaze[7][2].west=&wall;
+	
+	modelMaze[0][3].north=&modelMaze[0][4];
+	modelMaze[0][3].east=&modelMaze[1][3];
+	modelMaze[0][3].south=&modelMaze[0][2];
+	modelMaze[0][3].west=&wall;
+	
+	modelMaze[1][3].north=&modelMaze[1][4];
+	modelMaze[1][3].east=&modelMaze[2][3];
+	modelMaze[1][3].south=&modelMaze[1][2];
+	modelMaze[1][3].west=&modelMaze[0][3];
+	
+	modelMaze[2][3].north=&modelMaze[2][4];
+	modelMaze[2][3].east=&modelMaze[3][3];
+	modelMaze[2][3].south=&modelMaze[2][2];
+	modelMaze[2][3].west=&modelMaze[1][3];
+	
+	modelMaze[3][3].north=&modelMaze[3][4];
+	modelMaze[3][3].east=&modelMaze[4][3];
+	modelMaze[3][3].south=&wall;
+	modelMaze[3][3].west=&modelMaze[2][3];
+	
+	modelMaze[4][3].north=&modelMaze[4][4];
+	modelMaze[4][3].east=&wall;
+	modelMaze[4][3].south=&modelMaze[4][2];
+	modelMaze[4][3].west=&modelMaze[3][3];
+	
+	modelMaze[5][3].north=&modelMaze[5][4];
+	modelMaze[5][3].east=&wall;
+	modelMaze[5][3].south=&modelMaze[5][2];
+	modelMaze[5][3].west=&wall;
+	
+	modelMaze[6][3].north=&modelMaze[6][4];
+	modelMaze[6][3].east=&wall;
+	modelMaze[6][3].south=&modelMaze[6][2];
+	modelMaze[6][3].west=&wall;
+	
+	modelMaze[7][3].north=&modelMaze[7][4];
+	modelMaze[7][3].east=&wall;
+	modelMaze[7][3].south=&modelMaze[7][2];
+	modelMaze[7][3].west=&wall;
+	
+	modelMaze[0][4].north=&modelMaze[0][5];
+	modelMaze[0][4].east=&wall;
+	modelMaze[0][4].south=&modelMaze[0][3];
+	modelMaze[0][4].west=&wall;
+
+	modelMaze[1][4].north=&modelMaze[1][5];
+	modelMaze[1][4].east=&wall;
+	modelMaze[1][4].south=&modelMaze[1][3];
+	modelMaze[1][4].west=&wall;
+	
+	modelMaze[2][4].north=&modelMaze[2][5];
+	modelMaze[2][4].east=&wall;
+	modelMaze[2][4].south=&modelMaze[2][3];
+	modelMaze[2][4].west=&wall;
+	
+	modelMaze[3][4].north=&modelMaze[3][5];
+	modelMaze[3][4].east=&modelMaze[4][4];
+	modelMaze[3][4].south=&modelMaze[3][3];
+	modelMaze[3][4].west=&wall;
+	
+	modelMaze[4][4].north=&wall;
+	modelMaze[4][4].east=&modelMaze[5][4];
+	modelMaze[4][4].south=&modelMaze[4][3];
+	modelMaze[4][4].west=&modelMaze[3][4];
+	
+	modelMaze[5][4].north=&modelMaze[5][5];
+	modelMaze[5][4].east=&modelMaze[6][4];
+	modelMaze[5][4].south=&modelMaze[5][3];
+	modelMaze[5][4].west=&modelMaze[4][4];
+	
+	modelMaze[6][4].north=&modelMaze[6][5];
+	modelMaze[6][4].east=&modelMaze[7][4];
+	modelMaze[6][4].south=&modelMaze[6][3];
+	modelMaze[6][4].west=&modelMaze[5][4];
+
+	modelMaze[7][4].north=&modelMaze[7][5];
+	modelMaze[7][4].east=&wall;
+	modelMaze[7][4].south=&modelMaze[7][3];
+	modelMaze[7][4].west=&modelMaze[6][4];
+	
+	modelMaze[0][5].north=&modelMaze[0][6];
+	modelMaze[0][5].east=&wall;
+	modelMaze[0][5].south=&modelMaze[0][4];
+	modelMaze[0][5].west=&wall;
+
+	modelMaze[1][5].north=&modelMaze[1][6];
+	modelMaze[1][5].east=&wall;
+	modelMaze[1][5].south=&modelMaze[1][4];
+	modelMaze[1][5].west=&wall;
+	
+	modelMaze[2][5].north=&wall;
+	modelMaze[2][5].east=&modelMaze[3][5];
+	modelMaze[2][5].south=&modelMaze[2][4];
+	modelMaze[2][5].west=&wall;
+	
+	modelMaze[3][5].north=&modelMaze[3][6];
+	modelMaze[3][5].east=&modelMaze[4][5];
+	modelMaze[3][5].south=&modelMaze[3][4];
+	modelMaze[3][5].west=&modelMaze[2][5];
+	
+	modelMaze[4][5].north=&wall;
+	modelMaze[4][5].east=&modelMaze[5][5];
+	modelMaze[4][5].south=&wall;
+	modelMaze[4][5].west=&modelMaze[3][5];
+	
+	modelMaze[5][5].north=&wall;
+	modelMaze[5][5].east=&wall;
+	modelMaze[5][5].south=&modelMaze[5][4];
+	modelMaze[5][5].west=&modelMaze[4][5];
+
+	modelMaze[6][5].north=&modelMaze[6][6];
+	modelMaze[6][5].east=&wall;
+	modelMaze[6][5].south=&modelMaze[6][4];
+	modelMaze[6][5].west=&wall;
+
+	modelMaze[7][5].north=&modelMaze[7][6];
+	modelMaze[7][5].east=&wall;
+	modelMaze[7][5].south=&modelMaze[7][4];
+	modelMaze[7][5].west=&wall;
+	
+	modelMaze[0][6].north=&modelMaze[0][7];
+	modelMaze[0][6].east=&wall;
+	modelMaze[0][6].south=&modelMaze[0][5];
+	modelMaze[0][6].west=&wall;
+
+	modelMaze[1][6].north=&wall;
+	modelMaze[1][6].east=&modelMaze[2][6];
+	modelMaze[1][6].south=&modelMaze[1][5];
+	modelMaze[1][6].west=&wall;
+	
+	modelMaze[2][6].north=&wall;
+	modelMaze[2][6].east=&modelMaze[3][6];
+	modelMaze[2][6].south=&wall;
+	modelMaze[2][6].west=&modelMaze[1][6];
+	
+	modelMaze[3][6].north=&modelMaze[3][7];
+	modelMaze[3][6].east=&modelMaze[4][6];
+	modelMaze[3][6].south=&modelMaze[3][5];
+	modelMaze[3][6].west=&modelMaze[2][6];
+	
+	modelMaze[4][6].north=&wall;
+	modelMaze[4][6].east=&modelMaze[5][6];
+	modelMaze[4][6].south=&wall;
+	modelMaze[4][6].west=&modelMaze[3][6];
+	
+	modelMaze[5][6].north=&wall;
+	modelMaze[5][6].east=&modelMaze[6][6];
+	modelMaze[5][6].south=&wall;
+	modelMaze[5][6].west=&modelMaze[4][6];
+
+	modelMaze[6][6].north=&wall;
+	modelMaze[6][6].east=&wall;
+	modelMaze[6][6].south=&modelMaze[6][5];
+	modelMaze[6][6].west=&modelMaze[5][6];
+
+	modelMaze[7][6].north=&modelMaze[7][7];
+	modelMaze[7][6].east=&wall;
+	modelMaze[7][6].south=&modelMaze[7][5];
+	modelMaze[7][6].west=&wall;
+	
+	modelMaze[0][7].north=&wall;
+	modelMaze[0][7].east=&modelMaze[1][7];
+	modelMaze[0][7].south=&modelMaze[0][6];
+	modelMaze[0][7].west=&wall;
+
+	modelMaze[1][7].north=&wall;
+	modelMaze[1][7].east=&modelMaze[2][7];
+	modelMaze[1][7].south=&wall;
+	modelMaze[1][7].west=&modelMaze[0][7];
+	
+	modelMaze[2][7].north=&wall;
+	modelMaze[2][7].east=&modelMaze[3][7];
+	modelMaze[2][7].south=&wall;
+	modelMaze[2][7].west=&modelMaze[1][7];
+	
+	modelMaze[3][7].north=&wall;
+	modelMaze[3][7].east=&modelMaze[4][7];
+	modelMaze[3][7].south=&modelMaze[3][6];
+	modelMaze[3][7].west=&modelMaze[2][7];
+	
+	modelMaze[4][7].north=&wall;
+	modelMaze[4][7].east=&modelMaze[5][7];
+	modelMaze[4][7].south=&wall;
+	modelMaze[4][7].west=&modelMaze[3][7];
+	
+	modelMaze[5][7].north=&wall;
+	modelMaze[5][7].east=&modelMaze[6][7];
+	modelMaze[5][7].south=&wall;
+	modelMaze[5][7].west=&modelMaze[4][7];
+
+	modelMaze[6][7].north=&wall;
+	modelMaze[6][7].east=&modelMaze[7][7];
+	modelMaze[6][7].south=&wall;
+	modelMaze[6][7].west=&modelMaze[5][7];
+
+	modelMaze[7][7].north=&wall;
+	modelMaze[7][7].east=&wall;
+	modelMaze[7][7].south=&modelMaze[7][6];
+	modelMaze[7][7].west=&modelMaze[6][7];
+}
+
+//setting model maze 2. This is the data for each node of the maze
+//this maze contains multiple paths to the end and many 
+initializeModelMaze1(){
+	modelMaze[0][0].north=&modelMaze[0][1];
+	modelMaze[0][0].east=&wall;
+	modelMaze[0][0].south=&wall;
+	modelMaze[0][0].west=&wall;
+	
+	modelMaze[1][0].north=&modelMaze[1][1];
+	modelMaze[1][0].east=&wall;
+	modelMaze[1][0].south=&wall;
+	modelMaze[1][0].west=&wall;
+	
+	modelMaze[2][0].north=&modelMaze[2][1];
+	modelMaze[2][0].east=&wall;
+	modelMaze[2][0].south=&wall;
+	modelMaze[2][0].west=&wall;
+	
+	modelMaze[3][0].north=&wall;
+	modelMaze[3][0].east=&modelMaze[4][0];
+	modelMaze[3][0].south=&wall;
+	modelMaze[3][0].west=&wall;
+	
+	modelMaze[4][0].north=&wall;
+	modelMaze[4][0].east=&modelMaze[5][0];
+	modelMaze[4][0].south=&wall;
+	modelMaze[4][0].west=&modelMaze[3][0];
+	
+	modelMaze[5][0].north=&modelMaze[5][1];
+	modelMaze[5][0].east=&modelMaze[6][0];
+	modelMaze[5][0].south=&wall;
+	modelMaze[5][0].west=&modelMaze[4][0];
+	
+	modelMaze[6][0].north=&wall;
+	modelMaze[6][0].east=&wall;
+	modelMaze[6][0].south=&wall;
+	modelMaze[6][0].west=&modelMaze[5][0];
+	
+	modelMaze[7][0].north=&wall;
+	modelMaze[7][0].east=&wall;
+	modelMaze[7][0].south=&wall;
+	modelMaze[7][0].west=&wall;
+	
+	modelMaze[0][1].north=&modelMaze[0][2];
+	modelMaze[0][1].east=&modelMaze[1][1];
+	modelMaze[0][1].south=&modelMaze[0][0];
+	modelMaze[0][1].west=&wall;
+	
+	modelMaze[1][1].north=&wall;
+	modelMaze[1][1].east=&modelMaze[2][1];
+	modelMaze[1][1].south=&modelMaze[1][0];
+	modelMaze[1][1].west=&modelMaze[0][1];
+	
+	modelMaze[2][1].north=&modelMaze[2][2];
+	modelMaze[2][1].east=&wall;
+	modelMaze[2][1].south=&modelMaze[2][0];
+	modelMaze[2][1].west=&modelMaze[1][1];
+	
+	modelMaze[3][1].north=&modelMaze[3][2];
+	modelMaze[3][1].east=&modelMaze[4][1];
+	modelMaze[3][1].south=&wall;
+	modelMaze[3][1].west=&wall;
+	
+	modelMaze[4][1].north=&wall;
+	modelMaze[4][1].east=&modelMaze[5][1];
+	modelMaze[4][1].south=&wall;
+	modelMaze[4][1].west=&modelMaze[3][1];
+	
+	modelMaze[5][1].north=&modelMaze[5][2];
+	modelMaze[5][1].east=&wall;
+	modelMaze[5][1].south=&modelMaze[5][0];
+	modelMaze[5][1].west=&modelMaze[4][1];
+	
+	modelMaze[6][1].north=&modelMaze[6][2];
+	modelMaze[6][1].east=&modelMaze[7][1];
+	modelMaze[6][1].south=&wall;
+	modelMaze[6][1].west=&wall;
+	
+	modelMaze[7][1].north=&wall;
+	modelMaze[7][1].east=&wall;
+	modelMaze[7][1].south=&wall;
+	modelMaze[7][1].west=&modelMaze[6][1];
+	
+	modelMaze[0][2].north=&modelMaze[0][3];
+	modelMaze[0][2].east=&wall;
+	modelMaze[0][2].south=&modelMaze[0][1];
+	modelMaze[0][2].west=&wall;
+	
+	modelMaze[1][2].north=&modelMaze[1][3];
+	modelMaze[1][2].east=&wall;
+	modelMaze[1][2].south=&wall;
+	modelMaze[1][2].west=&wall;
+	
+	modelMaze[2][2].north=&wall;
+	modelMaze[2][2].east=&wall;
+	modelMaze[2][2].south=&modelMaze[2][1];
+	modelMaze[2][2].west=&wall;
+	
+	modelMaze[3][2].north=&modelMaze[3][3];
+	modelMaze[3][2].east=&wall;
+	modelMaze[3][2].south=&modelMaze[3][1];
+	modelMaze[3][2].west=&wall;
+	
+	modelMaze[4][2].north=&wall;
+	modelMaze[4][2].east=&modelMaze[5][2];
+	modelMaze[4][2].south=&wall;
+	modelMaze[4][2].west=&wall;
+	
+	modelMaze[5][2].north=&wall;
+	modelMaze[5][2].east=&wall;
+	modelMaze[5][2].south=&modelMaze[5][1];
+	modelMaze[5][2].west=&modelMaze[4][2];
+	
+	modelMaze[6][2].north=&wall;
+	modelMaze[6][2].east=&modelMaze[7][2];
+	modelMaze[6][2].south=&modelMaze[6][1];
+	modelMaze[6][2].west=&wall;
+	
+	modelMaze[7][2].north=&modelMaze[7][3];
+	modelMaze[7][2].east=&wall;
+	modelMaze[7][2].south=&wall;
+	modelMaze[7][2].west=&modelMaze[6][2];
+	
+	modelMaze[0][3].north=&wall;
+	modelMaze[0][3].east=&modelMaze[1][3];
+	modelMaze[0][3].south=&modelMaze[0][2];
+	modelMaze[0][3].west=&wall;
+	
+	modelMaze[1][3].north=&wall;
+	modelMaze[1][3].east=&modelMaze[2][3];
+	modelMaze[1][3].south=&modelMaze[1][2];
+	modelMaze[1][3].west=&modelMaze[0][3];
+	
+	modelMaze[2][3].north=&wall;
+	modelMaze[2][3].east=&modelMaze[3][3];
+	modelMaze[2][3].south=&wall;
+	modelMaze[2][3].west=&modelMaze[1][3];
+	
+	modelMaze[3][3].north=&modelMaze[3][4];
+	modelMaze[3][3].east=&modelMaze[4][3];
+	modelMaze[3][3].south=&modelMaze[3][2];
+	modelMaze[3][3].west=&modelMaze[2][3];
+	
+	modelMaze[4][3].north=&modelMaze[4][4];
+	modelMaze[4][3].east=&modelMaze[5][3];
+	modelMaze[4][3].south=&wall;
+	modelMaze[4][3].west=&modelMaze[3][3];
+	
+	modelMaze[5][3].north=&modelMaze[5][4];
+	modelMaze[5][3].east=&wall;
+	modelMaze[5][3].south=&wall;
+	modelMaze[5][3].west=&modelMaze[4][3];
+	
+	modelMaze[6][3].north=&modelMaze[6][4];
+	modelMaze[6][3].east=&modelMaze[7][3];
+	modelMaze[6][3].south=&wall;
+	modelMaze[6][3].west=&wall;
+	
+	modelMaze[7][3].north=&wall;
+	modelMaze[7][3].east=&wall;
+	modelMaze[7][3].south=&modelMaze[7][2];
+	modelMaze[7][3].west=&modelMaze[6][3];
+	
+	modelMaze[0][4].north=&modelMaze[0][5];
+	modelMaze[0][4].east=&modelMaze[1][4];
+	modelMaze[0][4].south=&wall;
+	modelMaze[0][4].west=&wall;
+
+	modelMaze[1][4].north=&wall;
+	modelMaze[1][4].east=&modelMaze[2][4];
+	modelMaze[1][4].south=&wall;
+	modelMaze[1][4].west=&modelMaze[0][4];
+	
+	modelMaze[2][4].north=&modelMaze[2][5];
+	modelMaze[2][4].east=&wall;
+	modelMaze[2][4].south=&wall;
+	modelMaze[2][4].west=&modelMaze[1][4];
+	
+	modelMaze[3][4].north=&modelMaze[3][5];
+	modelMaze[3][4].east=&wall;
+	modelMaze[3][4].south=&modelMaze[3][3];
+	modelMaze[3][4].west=&wall;
+	
+	modelMaze[4][4].north=&wall;
+	modelMaze[4][4].east=&modelMaze[5][4];
+	modelMaze[4][4].south=&modelMaze[4][3];
+	modelMaze[4][4].west=&wall;
+	
+	modelMaze[5][4].north=&wall;
+	modelMaze[5][4].east=&wall;
+	modelMaze[5][4].south=&modelMaze[5][3];
+	modelMaze[5][4].west=&modelMaze[4][4];
+	
+	modelMaze[6][4].north=&modelMaze[6][5];
+	modelMaze[6][4].east=&modelMaze[7][4];
+	modelMaze[6][4].south=&modelMaze[6][3];
+	modelMaze[6][4].west=&wall;
+
+	modelMaze[7][4].north=&modelMaze[7][5];
+	modelMaze[7][4].east=&wall;
+	modelMaze[7][4].south=&wall;
+	modelMaze[7][4].west=&modelMaze[6][4];
+	
+	modelMaze[0][5].north=&wall;
+	modelMaze[0][5].east=&wall;
+	modelMaze[0][5].south=&modelMaze[0][4];
+	modelMaze[0][5].west=&wall;
+
+	modelMaze[1][5].north=&modelMaze[1][6];
+	modelMaze[1][5].east=&modelMaze[2][5];
+	modelMaze[1][5].south=&wall;
+	modelMaze[1][5].west=&wall;
+	
+	modelMaze[2][5].north=&wall;
+	modelMaze[2][5].east=&modelMaze[3][5];
+	modelMaze[2][5].south=&modelMaze[2][4];
+	modelMaze[2][5].west=&modelMaze[1][5];
+	
+	modelMaze[3][5].north=&wall;
+	modelMaze[3][5].east=&modelMaze[4][5];
+	modelMaze[3][5].south=&modelMaze[3][4];
+	modelMaze[3][5].west=&modelMaze[2][5];
+	
+	modelMaze[4][5].north=&wall;
+	modelMaze[4][5].east=&modelMaze[5][5];
+	modelMaze[4][5].south=&wall;
+	modelMaze[4][5].west=&modelMaze[3][5];
+	
+	modelMaze[5][5].north=&modelMaze[5][6];
+	modelMaze[5][5].east=&modelMaze[6][5];
+	modelMaze[5][5].south=&wall;
+	modelMaze[5][5].west=&modelMaze[4][5];
+
+	modelMaze[6][5].north=&wall;
+	modelMaze[6][5].east=&wall;
+	modelMaze[6][5].south=&modelMaze[6][4];
+	modelMaze[6][5].west=&modelMaze[5][5];
+
+	modelMaze[7][5].north=&modelMaze[7][6];
+	modelMaze[7][5].east=&wall;
+	modelMaze[7][5].south=&modelMaze[7][4];
+	modelMaze[7][5].west=&wall;
+	
+	modelMaze[0][6].north=&modelMaze[0][7];
+	modelMaze[0][6].east=&modelMaze[1][6];
+	modelMaze[0][6].south=&wall;
+	modelMaze[0][6].west=&wall;
+
+	modelMaze[1][6].north=&wall;
+	modelMaze[1][6].east=&wall;
+	modelMaze[1][6].south=&modelMaze[1][5];
+	modelMaze[1][6].west=&modelMaze[0][6];
+	
+	modelMaze[2][6].north=&modelMaze[2][7];
+	modelMaze[2][6].east=&modelMaze[3][6];
+	modelMaze[2][6].south=&wall;
+	modelMaze[2][6].west=&wall;
+	
+	modelMaze[3][6].north=&modelMaze[3][7];
+	modelMaze[3][6].east=&modelMaze[4][6];
+	modelMaze[3][6].south=&wall;
+	modelMaze[3][6].west=&modelMaze[2][6];
+	
+	modelMaze[4][6].north=&modelMaze[4][7];
+	modelMaze[4][6].east=&modelMaze[5][6];
+	modelMaze[4][6].south=&wall;
+	modelMaze[4][6].west=&modelMaze[3][6];
+	
+	modelMaze[5][6].north=&modelMaze[5][7];
+	modelMaze[5][6].east=&wall;
+	modelMaze[5][6].south=&modelMaze[5][5];
+	modelMaze[5][6].west=&modelMaze[4][6];
+
+	modelMaze[6][6].north=&modelMaze[6][7];
+	modelMaze[6][6].east=&wall;
+	modelMaze[6][6].south=&wall;
+	modelMaze[6][6].west=&wall;
+
+	modelMaze[7][6].north=&modelMaze[7][7];
+	modelMaze[7][6].east=&wall;
+	modelMaze[7][6].south=&modelMaze[7][5];
+	modelMaze[7][6].west=&wall;
+	
+	modelMaze[0][7].north=&wall;
+	modelMaze[0][7].east=&modelMaze[1][7];
+	modelMaze[0][7].south=&modelMaze[0][6];
+	modelMaze[0][7].west=&wall;
+
+	modelMaze[1][7].north=&wall;
+	modelMaze[1][7].east=&modelMaze[2][7];
+	modelMaze[1][7].south=&wall;
+	modelMaze[1][7].west=&modelMaze[0][7];
+	
+	modelMaze[2][7].north=&wall;
+	modelMaze[2][7].east=&wall;
+	modelMaze[2][7].south=&modelMaze[2][6];
+	modelMaze[2][7].west=&modelMaze[1][7];
+	
+	modelMaze[3][7].north=&wall;
+	modelMaze[3][7].east=&wall;
+	modelMaze[3][7].south=&modelMaze[3][6];
+	modelMaze[3][7].west=&wall;
+	
+	modelMaze[4][7].north=&wall;
+	modelMaze[4][7].east=&wall;
+	modelMaze[4][7].south=&modelMaze[4][6];
+	modelMaze[4][7].west=&wall;
+	
+	modelMaze[5][7].north=&wall;
+	modelMaze[5][7].east=&wall;
+	modelMaze[5][7].south=&modelMaze[5][6];
+	modelMaze[5][7].west=&wall;
+
+	modelMaze[6][7].north=&wall;
+	modelMaze[6][7].east=&modelMaze[7][7];
+	modelMaze[6][7].south=&modelMaze[6][6];
+	modelMaze[6][7].west=&wall;
+
+	modelMaze[7][7].north=&wall;
+	modelMaze[7][7].east=&wall;
+	modelMaze[7][7].south=&modelMaze[7][6];
+	modelMaze[7][7].west=&modelMaze[6][7];
+}
+
+//setting model maze 3. This is the data for each node of the maze
+//this maze contains multiple mazes that are smaller than 8x8 change the starting position from [0][0] to [0][5] for the second maze
+initializeModelMaze3(){
+	modelMaze[0][0].north=&wall;
+	modelMaze[0][0].east=&modelMaze[1][0];
+	modelMaze[0][0].south=&wall;
+	modelMaze[0][0].west=&wall;
+	
+	modelMaze[1][0].north=&modelMaze[1][1];
+	modelMaze[1][0].east=&wall;
+	modelMaze[1][0].south=&wall;
+	modelMaze[1][0].west=&modelMaze[0][0];
+	
+	modelMaze[2][0].north=&modelMaze[2][1];
+	modelMaze[2][0].east=&modelMaze[3][0];
+	modelMaze[2][0].south=&wall;
+	modelMaze[2][0].west=&wall;
+	
+	modelMaze[3][0].north=&wall;
+	modelMaze[3][0].east=&modelMaze[4][0];
+	modelMaze[3][0].south=&wall;
+	modelMaze[3][0].west=&modelMaze[2][0];
+	
+	modelMaze[4][0].north=&wall;
+	modelMaze[4][0].east=&modelMaze[5][0];
+	modelMaze[4][0].south=&wall;
+	modelMaze[4][0].west=&modelMaze[3][0];
+	
+	modelMaze[5][0].north=&modelMaze[5][1];
+	modelMaze[5][0].east=&wall;
+	modelMaze[5][0].south=&wall;
+	modelMaze[5][0].west=&modelMaze[4][0];
+	
+	modelMaze[6][0].north=&modelMaze[6][1];
+	modelMaze[6][0].east=&modelMaze[7][0];
+	modelMaze[6][0].south=&wall;
+	modelMaze[6][0].west=&wall;
+	
+	modelMaze[7][0].north=&modelMaze[7][1];
+	modelMaze[7][0].east=&wall;
+	modelMaze[7][0].south=&wall;
+	modelMaze[7][0].west=&modelMaze[6][0];
+	
+	modelMaze[0][1].north=&modelMaze[0][2];
+	modelMaze[0][1].east=&wall;
+	modelMaze[0][1].south=&wall;
+	modelMaze[0][1].west=&wall;
+	
+	modelMaze[1][1].north=&wall;
+	modelMaze[1][1].east=&modelMaze[2][1];
+	modelMaze[1][1].south=&modelMaze[1][0];
+	modelMaze[1][1].west=&wall;
+	
+	modelMaze[2][1].north=&modelMaze[2][2];
+	modelMaze[2][1].east=&modelMaze[3][1];
+	modelMaze[2][1].south=&modelMaze[2][0];
+	modelMaze[2][1].west=&modelMaze[1][1];
+	
+	modelMaze[3][1].north=&wall;
+	modelMaze[3][1].east=&modelMaze[4][1];
+	modelMaze[3][1].south=&wall;
+	modelMaze[3][1].west=&modelMaze[2][1];
+	
+	modelMaze[4][1].north=&wall;
+	modelMaze[4][1].east=&wall;
+	modelMaze[4][1].south=&wall;
+	modelMaze[4][1].west=&modelMaze[3][1];
+	
+	modelMaze[5][1].north=&modelMaze[5][2];
+	modelMaze[5][1].east=&wall;
+	modelMaze[5][1].south=&modelMaze[5][0];
+	modelMaze[5][1].west=&wall;
+	
+	modelMaze[6][1].north=&modelMaze[6][2];
+	modelMaze[6][1].east=&modelMaze[7][1];
+	modelMaze[6][1].south=&modelMaze[6][0];
+	modelMaze[6][1].west=&wall;
+	
+	modelMaze[7][1].north=&modelMaze[7][2];
+	modelMaze[7][1].east=&wall;
+	modelMaze[7][1].south=&modelMaze[7][0];
+	modelMaze[7][1].west=&modelMaze[6][1];
+	
+	modelMaze[0][2].north=&wall;
+	modelMaze[0][2].east=&modelMaze[1][2];
+	modelMaze[0][2].south=&modelMaze[0][1];
+	modelMaze[0][2].west=&wall;
+	
+	modelMaze[1][2].north=&wall;
+	modelMaze[1][2].east=&modelMaze[2][2];
+	modelMaze[1][2].south=&wall;
+	modelMaze[1][2].west=&modelMaze[0][2];
+	
+	modelMaze[2][2].north=&wall;
+	modelMaze[2][2].east=&modelMaze[3][2];
+	modelMaze[2][2].south=&modelMaze[2][1];
+	modelMaze[2][2].west=&modelMaze[1][2];
+	
+	modelMaze[3][2].north=&modelMaze[3][3];
+	modelMaze[3][2].east=&modelMaze[4][2];
+	modelMaze[3][2].south=&wall;
+	modelMaze[3][2].west=&modelMaze[2][2];
+	
+	modelMaze[4][2].north=&wall;
+	modelMaze[4][2].east=&modelMaze[5][2];
+	modelMaze[4][2].south=&wall;
+	modelMaze[4][2].west=&modelMaze[3][2];
+	
+	modelMaze[5][2].north=&wall;
+	modelMaze[5][2].east=&wall;
+	modelMaze[5][2].south=&modelMaze[5][1];
+	modelMaze[5][2].west=&modelMaze[4][2];
+	
+	modelMaze[6][2].north=&wall;
+	modelMaze[6][2].east=&modelMaze[7][2];
+	modelMaze[6][2].south=&modelMaze[6][1];
+	modelMaze[6][2].west=&wall;
+	
+	modelMaze[7][2].north=&modelMaze[7][3];
+	modelMaze[7][2].east=&wall;
+	modelMaze[7][2].south=&modelMaze[7][1];
+	modelMaze[7][2].west=&wall;
+	
+	modelMaze[0][3].north=&modelMaze[0][4];
+	modelMaze[0][3].east=&wall;
+	modelMaze[0][3].south=&wall;
+	modelMaze[0][3].west=&wall;
+	
+	modelMaze[1][3].north=&modelMaze[1][4];
+	modelMaze[1][3].east=&modelMaze[2][3];
+	modelMaze[1][3].south=&wall;
+	modelMaze[1][3].west=&wall;
+	
+	modelMaze[2][3].north=&modelMaze[2][4];
+	modelMaze[2][3].east=&modelMaze[3][3];
+	modelMaze[2][3].south=&wall;
+	modelMaze[2][3].west=&modelMaze[1][3];
+	
+	modelMaze[3][3].north=&wall;
+	modelMaze[3][3].east=&wall;
+	modelMaze[3][3].south=&modelMaze[3][2];
+	modelMaze[3][3].west=&modelMaze[2][3];
+	
+	modelMaze[4][3].north=&modelMaze[4][4];
+	modelMaze[4][3].east=&modelMaze[5][3];
+	modelMaze[4][3].south=&wall;
+	modelMaze[4][3].west=&wall;
+	
+	modelMaze[5][3].north=&modelMaze[5][4];
+	modelMaze[5][3].east=&wall;
+	modelMaze[5][3].south=&wall;
+	modelMaze[5][3].west=&modelMaze[4][3];
+	
+	modelMaze[6][3].north=&modelMaze[6][4];
+	modelMaze[6][3].east=&wall;
+	modelMaze[6][3].south=&modelMaze[6][2];
+	modelMaze[6][3].west=&wall;
+	
+	modelMaze[7][3].north=&modelMaze[7][4];
+	modelMaze[7][3].east=&wall;
+	modelMaze[7][3].south=&modelMaze[7][2];
+	modelMaze[7][3].west=&wall;
+	
+	modelMaze[0][4].north=&wall;
+	modelMaze[0][4].east=&modelMaze[1][4];
+	modelMaze[0][4].south=&modelMaze[0][3];
+	modelMaze[0][4].west=&wall;
+
+	modelMaze[1][4].north=&wall;
+	modelMaze[1][4].east=&wall;
+	modelMaze[1][4].south=&modelMaze[1][3];
+	modelMaze[1][4].west=&modelMaze[0][4];
+	
+	modelMaze[2][4].north=&wall;
+	modelMaze[2][4].east=&modelMaze[3][4];
+	modelMaze[2][4].south=&modelMaze[2][3];
+	modelMaze[2][4].west=&wall;
+	
+	modelMaze[3][4].north=&wall;
+	modelMaze[3][4].east=&modelMaze[4][4];
+	modelMaze[3][4].south=&wall;
+	modelMaze[3][4].west=&modelMaze[2][4];
+	
+	modelMaze[4][4].north=&wall;
+	modelMaze[4][4].east=&modelMaze[5][4];
+	modelMaze[4][4].south=&modelMaze[4][3];
+	modelMaze[4][4].west=&modelMaze[3][4];
+	
+	modelMaze[5][4].north=&wall;
+	modelMaze[5][4].east=&wall;
+	modelMaze[5][4].south=&modelMaze[5][3];
+	modelMaze[5][4].west=&modelMaze[4][4];
+	
+	modelMaze[6][4].north=&modelMaze[6][5];
+	modelMaze[6][4].east=&wall;
+	modelMaze[6][4].south=&modelMaze[6][3];
+	modelMaze[6][4].west=&wall;
+
+	modelMaze[7][4].north=&modelMaze[7][5];
+	modelMaze[7][4].east=&wall;
+	modelMaze[7][4].south=&modelMaze[7][3];
+	modelMaze[7][4].west=&wall;
+	
+	modelMaze[0][5].north=&modelMaze[0][6];
+	modelMaze[0][5].east=&modelMaze[1][5];
+	modelMaze[0][5].south=&wall;
+	modelMaze[0][5].west=&wall;
+
+	modelMaze[1][5].north=&modelMaze[1][6];
+	modelMaze[1][5].east=&modelMaze[2][5];
+	modelMaze[1][5].south=&wall;
+	modelMaze[1][5].west=&modelMaze[0][5];
+	
+	modelMaze[2][5].north=&modelMaze[2][6];
+	modelMaze[2][5].east=&modelMaze[3][5];
+	modelMaze[2][5].south=&wall;
+	modelMaze[2][5].west=&modelMaze[1][5];
+	
+	modelMaze[3][5].north=&modelMaze[3][6];
+	modelMaze[3][5].east=&modelMaze[4][5];
+	modelMaze[3][5].south=&wall;
+	modelMaze[3][5].west=&modelMaze[2][5];
+	
+	modelMaze[4][5].north=&modelMaze[4][6];
+	modelMaze[4][5].east=&modelMaze[5][5];
+	modelMaze[4][5].south=&wall;
+	modelMaze[4][5].west=&modelMaze[3][5];
+	
+	modelMaze[5][5].north=&modelMaze[5][6];
+	modelMaze[5][5].east=&modelMaze[6][5];
+	modelMaze[5][5].south=&wall;
+	modelMaze[5][5].west=&modelMaze[4][5];
+
+	modelMaze[6][5].north=&modelMaze[6][6];
+	modelMaze[6][5].east=&wall;
+	modelMaze[6][5].south=&modelMaze[6][4];
+	modelMaze[6][5].west=&modelMaze[5][5];
+
+	modelMaze[7][5].north=&modelMaze[7][6];
+	modelMaze[7][5].east=&wall;
+	modelMaze[7][5].south=&modelMaze[7][4];
+	modelMaze[7][5].west=&wall;
+	
+	modelMaze[0][6].north=&modelMaze[0][7];
+	modelMaze[0][6].east=&wall;
+	modelMaze[0][6].south=&modelMaze[0][5];
+	modelMaze[0][6].west=&wall;
+
+	modelMaze[1][6].north=&modelMaze[1][7];
+	modelMaze[1][6].east=&wall;
+	modelMaze[1][6].south=&modelMaze[1][5];
+	modelMaze[1][6].west=&wall;
+	
+	modelMaze[2][6].north=&modelMaze[2][7];
+	modelMaze[2][6].east=&wall;
+	modelMaze[2][6].south=&modelMaze[2][5];
+	modelMaze[2][6].west=&wall;
+	
+	modelMaze[3][6].north=&modelMaze[3][7];
+	modelMaze[3][6].east=&wall;
+	modelMaze[3][6].south=&modelMaze[3][5];
+	modelMaze[3][6].west=&wall;
+	
+	modelMaze[4][6].north=&modelMaze[4][7];
+	modelMaze[4][6].east=&wall;
+	modelMaze[4][6].south=&modelMaze[4][5];
+	modelMaze[4][6].west=&wall;
+	
+	modelMaze[5][6].north=&modelMaze[5][7];
+	modelMaze[5][6].east=&wall;
+	modelMaze[5][6].south=&modelMaze[5][5];
+	modelMaze[5][6].west=&wall;
+
+	modelMaze[6][6].north=&modelMaze[6][7];
+	modelMaze[6][6].east=&wall;
+	modelMaze[6][6].south=&modelMaze[6][5];
+	modelMaze[6][6].west=&wall;
+
+	modelMaze[7][6].north=&modelMaze[7][7];
+	modelMaze[7][6].east=&wall;
+	modelMaze[7][6].south=&modelMaze[7][5];
+	modelMaze[7][6].west=&wall;
+	
+	modelMaze[0][7].north=&wall;
+	modelMaze[0][7].east=&modelMaze[1][7];
+	modelMaze[0][7].south=&modelMaze[0][6];
+	modelMaze[0][7].west=&wall;
+
+	modelMaze[1][7].north=&wall;
+	modelMaze[1][7].east=&modelMaze[2][7];
+	modelMaze[1][7].south=&modelMaze[1][6];
+	modelMaze[1][7].west=&modelMaze[0][7];
+	
+	modelMaze[2][7].north=&wall;
+	modelMaze[2][7].east=&modelMaze[3][7];
+	modelMaze[2][7].south=&modelMaze[2][6];
+	modelMaze[2][7].west=&modelMaze[1][7];
+	
+	modelMaze[3][7].north=&wall;
+	modelMaze[3][7].east=&modelMaze[4][7];
+	modelMaze[3][7].south=&modelMaze[3][6];
+	modelMaze[3][7].west=&modelMaze[2][7];
+	
+	modelMaze[4][7].north=&wall;
+	modelMaze[4][7].east=&modelMaze[5][7];
+	modelMaze[4][7].south=&modelMaze[4][6];
+	modelMaze[4][7].west=&modelMaze[3][7];
+	
+	modelMaze[5][7].north=&wall;
+	modelMaze[5][7].east=&modelMaze[6][7];
+	modelMaze[5][7].south=&modelMaze[5][6];
+	modelMaze[5][7].west=&modelMaze[4][7];
+
+	modelMaze[6][7].north=&wall;
+	modelMaze[6][7].east=&modelMaze[7][7];
+	modelMaze[6][7].south=&modelMaze[6][6];
+	modelMaze[6][7].west=&modelMaze[5][7];
+
+	modelMaze[7][7].north=&wall;
+	modelMaze[7][7].east=&wall;
+	modelMaze[7][7].south=&modelMaze[7][6];
+	modelMaze[7][7].west=&modelMaze[6][7];
+}
+
+//setting model maze 4. This is the data for each node of the maze
+//this is the same maze as modelMaze1 but is off set as to simulate starting in the center of the maze. The start is also the end
+initializeModelMaze4(){
+	modelMaze[0][0].north=&wall;
+	modelMaze[0][0].east=&modelMaze[1][0];
+	modelMaze[0][0].south=&modelMaze[0][7];
+	modelMaze[0][0].west=&wall;
+	
+	modelMaze[1][0].north=&wall;
+	modelMaze[1][0].east=&wall;
+	modelMaze[1][0].south=&modelMaze[1][7];
+	modelMaze[1][0].west=&modelMaze[0][0];
+	
+	modelMaze[2][0].north=&modelMaze[2][1];
+	modelMaze[2][0].east=&modelMaze[3][0];
+	modelMaze[2][0].south=&modelMaze[2][7];
+	modelMaze[2][0].west=&wall;
+	
+	modelMaze[3][0].north=&modelMaze[3][1];
+	modelMaze[3][0].east=&wall;
+	modelMaze[3][0].south=&wall;
+	modelMaze[3][0].west=&modelMaze[2][0];
+	
+	modelMaze[4][0].north=&modelMaze[4][1];
+	modelMaze[4][0].east=&modelMaze[5][0];
+	modelMaze[4][0].south=&wall;
+	modelMaze[4][0].west=&wall;
+	
+	modelMaze[5][0].north=&wall;
+	modelMaze[5][0].east=&modelMaze[3][0];
+	modelMaze[5][0].south=&wall;
+	modelMaze[5][0].west=&modelMaze[4][0];
+	
+	modelMaze[6][0].north=&modelMaze[6][1];
+	modelMaze[6][0].east=&wall;
+	modelMaze[6][0].south=&wall;
+	modelMaze[6][0].west=&modelMaze[5][0];
+	
+	modelMaze[7][0].north=&modelMaze[7][1];
+	modelMaze[7][0].east=&wall;
+	modelMaze[7][0].south=&modelMaze[7][7];
+	modelMaze[7][0].west=&wall;
+	
+	modelMaze[0][1].north=&wall;
+	modelMaze[0][1].east=&modelMaze[1][1];
+	modelMaze[0][1].south=&wall;
+	modelMaze[0][1].west=&modelMaze[7][1];
+	
+	modelMaze[1][1].north=&modelMaze[2][1];
+	modelMaze[1][1].east=&modelMaze[2][1];
+	modelMaze[1][1].south=&wall;
+	modelMaze[1][1].west=&modelMaze[1][0];
+	
+	modelMaze[2][1].north=&wall;
+	modelMaze[2][1].east=&wall;
+	modelMaze[2][1].south=&modelMaze[2][0];
+	modelMaze[2][1].west=&modelMaze[1][1];
+	
+	modelMaze[3][1].north=&modelMaze[3][2];
+	modelMaze[3][1].east=&wall;
+	modelMaze[3][1].south=&modelMaze[3][0];
+	modelMaze[3][1].west=&wall;
+	
+	modelMaze[4][1].north=&wall;
+	modelMaze[4][1].east=&wall;
+	modelMaze[4][1].south=&modelMaze[4][0];
+	modelMaze[4][1].west=&wall;
+	
+	modelMaze[5][1].north=&modelMaze[5][2];
+	modelMaze[5][1].east=&modelMaze[5][2];
+	modelMaze[5][1].south=&wall;
+	modelMaze[5][1].west=&wall;
+	
+	modelMaze[6][1].north=&wall;
+	modelMaze[6][1].east=&modelMaze[7][1];
+	modelMaze[6][1].south=&modelMaze[6][0];
+	modelMaze[6][1].west=&modelMaze[5][1];
+	
+	modelMaze[7][1].north=&wall;
+	modelMaze[7][1].east=&modelMaze[0][1];
+	modelMaze[7][1].south=&modelMaze[7][0];
+	modelMaze[7][1].west=&modelMaze[6][1];
+	
+	modelMaze[0][2].north=&modelMaze[0][3];
+	modelMaze[0][2].east=&modelMaze[1][2];
+	modelMaze[0][2].south=&wall;
+	modelMaze[0][2].west=&modelMaze[7][2];
+	
+	modelMaze[1][2].north=&modelMaze[1][3];
+	modelMaze[1][2].east=&wall;
+	modelMaze[1][2].south=&modelMaze[1][1];
+	modelMaze[1][2].west=&modelMaze[0][2];
+	
+	modelMaze[2][2].north=&modelMaze[2][3];
+	modelMaze[2][2].east=&wall;
+	modelMaze[2][2].south=&wall;
+	modelMaze[2][2].west=&wall;
+	
+	modelMaze[3][2].north=&modelMaze[3][3];
+	modelMaze[3][2].east=&wall;
+	modelMaze[3][2].south=&modelMaze[3][1];
+	modelMaze[3][2].west=&wall;
+	
+	modelMaze[4][2].north=&modelMaze[4][3];
+	modelMaze[4][2].east=&modelMaze[5][2];
+	modelMaze[4][2].south=&wall;
+	modelMaze[4][2].west=&wall;
+	
+	modelMaze[5][2].north=&wall;
+	modelMaze[5][2].east=&wall;
+	modelMaze[5][2].south=&modelMaze[5][1];
+	modelMaze[5][2].west=&modelMaze[4][2];
+	
+	modelMaze[6][2].north=&modelMaze[6][3];
+	modelMaze[6][2].east=&modelMaze[7][2];
+	modelMaze[6][2].south=&wall;
+	modelMaze[6][2].west=&wall;
+	
+	modelMaze[7][2].north=&modelMaze[7][3];
+	modelMaze[7][2].east=&modelMaze[0][2];
+	modelMaze[7][2].south=&wall;
+	modelMaze[7][2].west=&modelMaze[6][2];
+	
+	modelMaze[0][3].north=&wall;
+	modelMaze[0][3].east=&wall;
+	modelMaze[0][3].south=&modelMaze[0][2];
+	modelMaze[0][3].west=&wall;
+	
+	modelMaze[1][3].north=&wall;
+	modelMaze[1][3].east=&wall;
+	modelMaze[1][3].south=&modelMaze[1][2];
+	modelMaze[1][3].west=&wall;
+	
+	modelMaze[2][3].north=&wall;
+	modelMaze[2][3].east=&modelMaze[3][3];
+	modelMaze[2][3].south=&modelMaze[2][1];
+	modelMaze[2][3].west=&wall;
+	
+	modelMaze[3][3].north=&wall;
+	modelMaze[3][3].east=&wall;
+	modelMaze[3][3].south=&modelMaze[3][2];
+	modelMaze[3][3].west=&modelMaze[2][3];
+	
+	modelMaze[4][3].north=&wall;
+	modelMaze[4][3].east=&modelMaze[5][3];
+	modelMaze[4][3].south=&modelMaze[4][2];
+	modelMaze[4][3].west=&wall;
+	
+	modelMaze[5][3].north=&wall;
+	modelMaze[5][3].east=&modelMaze[6][3];
+	modelMaze[5][3].south=&wall;
+	modelMaze[5][3].west=&modelMaze[4][3];
+	
+	modelMaze[6][3].north=&wall;
+	modelMaze[6][3].east=&wall;
+	modelMaze[6][3].south=&modelMaze[6][2];
+	modelMaze[6][3].west=&modelMaze[5][3];
+	
+	modelMaze[7][3].north=&wall;
+	modelMaze[7][3].east=&wall;
+	modelMaze[7][3].south=&modelMaze[7][2];
+	modelMaze[7][3].west=&wall;
+	
+	modelMaze[0][4].north=&wall;
+	modelMaze[0][4].east=&modelMaze[1][4];
+	modelMaze[0][4].south=&wall;
+	modelMaze[0][4].west=&modelMaze[7][4];
+
+	modelMaze[1][4].north=&modelMaze[1][5];
+	modelMaze[1][4].east=&modelMaze[2][4];
+	modelMaze[1][4].south=&wall;
+	modelMaze[1][4].west=&modelMaze[0][4];
+	
+	modelMaze[2][4].north=&wall;
+	modelMaze[2][4].east=&wall;
+	modelMaze[2][4].south=&wall;
+	modelMaze[2][4].west=&modelMaze[1][4];
+	
+	modelMaze[3][4].north=&wall;
+	modelMaze[3][4].east=&wall;
+	modelMaze[3][4].south=&wall;
+	modelMaze[3][4].west=&wall;
+	
+	modelMaze[4][4].north=&modelMaze[4][5];
+	modelMaze[4][4].east=&wall;
+	modelMaze[4][4].south=&wall;
+	modelMaze[4][4].west=&wall;
+	
+	modelMaze[5][4].north=&modelMaze[5][5];
+	modelMaze[5][4].east=&wall;
+	modelMaze[5][4].south=&wall;
+	modelMaze[5][4].west=&wall;
+	
+	modelMaze[6][4].north=&modelMaze[6][5];
+	modelMaze[6][4].east=&wall;
+	modelMaze[6][4].south=&wall;
+	modelMaze[6][4].west=&wall;
+
+	modelMaze[7][4].north=&wall;
+	modelMaze[7][4].east=&modelMaze[0][4];
+	modelMaze[7][4].south=&wall;
+	modelMaze[7][4].west=&wall;
+	
+	modelMaze[0][5].north=&wall;
+	modelMaze[0][5].east=&modelMaze[1][5];
+	modelMaze[0][5].south=&wall;
+	modelMaze[0][5].west=&modelMaze[7][5];
+
+	modelMaze[1][5].north=&modelMaze[1][6];
+	modelMaze[1][5].east=&wall;
+	modelMaze[1][5].south=&modelMaze[1][4];
+	modelMaze[1][5].west=&modelMaze[0][5];
+	
+	modelMaze[2][5].north=&modelMaze[2][6];
+	modelMaze[2][5].east=&modelMaze[3][5];
+	modelMaze[2][5].south=&wall;
+	modelMaze[2][5].west=&wall;
+	
+	modelMaze[3][5].north=&wall;
+	modelMaze[3][5].east=&wall;
+	modelMaze[3][5].south=&wall;
+	modelMaze[3][5].west=&modelMaze[2][5];
+	
+	modelMaze[4][5].north=&modelMaze[4][6];
+	modelMaze[4][5].east=&modelMaze[5][5];
+	modelMaze[4][5].south=&modelMaze[5][5];
+	modelMaze[4][5].west=&wall;
+	
+	modelMaze[5][5].north=&wall;
+	modelMaze[5][5].east=&modelMaze[6][5];
+	modelMaze[5][5].south=&modelMaze[5][4];
+	modelMaze[5][5].west=&modelMaze[4][5];
+
+	modelMaze[6][5].north=&modelMaze[6][6];
+	modelMaze[6][5].east=&wall;
+	modelMaze[6][5].south=&modelMaze[6][4];
+	modelMaze[6][5].west=&modelMaze[5][5];
+
+	modelMaze[7][5].north=&modelMaze[7][6];
+	modelMaze[7][5].east=&modelMaze[0][5];
+	modelMaze[7][5].south=&wall;
+	modelMaze[7][5].west=&wall;
+	
+	modelMaze[0][6].north=&wall;
+	modelMaze[0][6].east=&modelMaze[1][6];
+	modelMaze[0][6].south=&wall;
+	modelMaze[0][6].west=&wall;
+
+	modelMaze[1][6].north=&wall;
+	modelMaze[1][6].east=&wall;
+	modelMaze[1][6].south=&modelMaze[1][5];
+	modelMaze[1][6].west=&modelMaze[0][6];
+	
+	modelMaze[2][6].north=&wall;
+	modelMaze[2][6].east=&modelMaze[3][6];
+	modelMaze[2][6].south=&modelMaze[2][5];
+	modelMaze[2][6].west=&wall;
+	
+	modelMaze[3][6].north=&modelMaze[3][7];
+	modelMaze[3][6].east=&wall;
+	modelMaze[3][6].south=&wall;
+	modelMaze[3][6].west=&modelMaze[2][6];
+	
+	modelMaze[4][6].north=&modelMaze[4][7];
+	modelMaze[4][6].east=&wall;
+	modelMaze[4][6].south=&modelMaze[4][5];
+	modelMaze[4][6].west=&wall;
+	
+	modelMaze[5][6].north=&modelMaze[5][7];
+	modelMaze[5][6].east=&wall;
+	modelMaze[5][6].south=&wall;
+	modelMaze[5][6].west=&wall;
+
+	modelMaze[6][6].north=&wall;
+	modelMaze[6][6].east=&wall;
+	modelMaze[6][6].south=&modelMaze[6][5];
+	modelMaze[6][6].west=&wall;
+
+	modelMaze[7][6].north=&modelMaze[7][7];
+	modelMaze[7][6].east=&wall;
+	modelMaze[7][6].south=&modelMaze[7][5];
+	modelMaze[7][6].west=&wall;
+	
+	modelMaze[0][7].north=&modelMaze[0][0];
+	modelMaze[0][7].east=&modelMaze[1][7];
+	modelMaze[0][7].south=&wall;
+	modelMaze[0][7].west=&modelMaze[7][7];
+
+	modelMaze[1][7].north=&modelMaze[1][7];
+	modelMaze[1][7].east=&wall;
+	modelMaze[1][7].south=&wall;
+	modelMaze[1][7].west=&modelMaze[0][7];
+	
+	modelMaze[2][7].north=&modelMaze[2][0];
+	modelMaze[2][7].east=&modelMaze[3][7];
+	modelMaze[2][7].south=&wall;
+	modelMaze[2][7].west=&wall;
+	
+	modelMaze[3][7].north=&wall;
+	modelMaze[3][7].east=&wall;
+	modelMaze[3][7].south=&modelMaze[3][6];
+	modelMaze[3][7].west=&modelMaze[2][7];
+	
+	modelMaze[4][7].north=&wall;
+	modelMaze[4][7].east=&modelMaze[5][7];
+	modelMaze[4][7].south=&modelMaze[4][6];
+	modelMaze[4][7].west=&wall;
+	
+	modelMaze[5][7].north=&wall;
+	modelMaze[5][7].east=&modelMaze[6][7];
+	modelMaze[5][7].south=&modelMaze[5][6];
+	modelMaze[5][7].west=&modelMaze[4][7];
+
+	modelMaze[6][7].north=&wall;
+	modelMaze[6][7].east=&modelMaze[7][7];
+	modelMaze[6][7].south=&wall;
+	modelMaze[6][7].west=&modelMaze[5][7];
+
+	modelMaze[7][7].north=&modelMaze[7][0];
+	modelMaze[7][7].east=&modelMaze[0][7];
+	modelMaze[7][7].south=&modelMaze[7][6];
+	modelMaze[7][7].west=&modelMaze[6][7];
+}
+/*
+ *Looks through all the tiles of the maze to find the end which is a 2x2 square
+ *
+ */
+void findEnd(){
+	for (int i=0; i<MAZE_X; i++){ //for every collowm
+		for (int j=0; j<MAZE_Y; j++){ //for every row
+			if(maze[i][j].east->north->west->south==&maze[i][j] && maze[i][j].visited) ending=&maze[i][j];//finds the 2x2 square that indicates the end
+		}
+	}
+}
+
+int main() {
+	//void setup(){
+	facing=NORTH; //set facing to north
+	initializeMaze(); //initialize the map of the maze
+	//}
+	//initialize and display the model maze that you want to solve
+	initializeModelMaze1();
+	//initializeModelMaze2();
+	//initializeModelMaze3();//if using the second maze, dont forget to change the goTo(maze[][]) to have [0][5] in mapMaze, initialize maze, and at the bottom of main
+	//initializeModelMaze4();
+	
+	
+	displayMaze(modelMaze); //shows the model maze selected
+	displayMaze(maze); //shows the empty map of the internal maze
+	
+	
+	//void loop(){
+	 //if (the map button is selected){
+	 // setup();
+	turnAround();
+	mapFront();
+	turnAround();
+	mapMaze();
+	findEnd();
+     //}
+    //}
+    //if (the solve button is selected){
+	goTo(ending);
+	//do a dance maybe
+	goTo(&maze[0][0]);
+	//}
+	return 0;
+}
