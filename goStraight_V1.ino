@@ -9,14 +9,15 @@ void setup() {
  //ENCODER COUNTER FROM THE JEENODE
  digitalRead(blockCount, INPUT); 
 
- //MOTOR 1
+ //MOTOR 1 (RIGHT)
  digitalRead(en1, OUTPUT);
  digitalRead(en2, OUTPUT);
+ analogRead(en3, OUTPUT);
  
- //MOTOR 2
- digitalRead(en3, OUTPUT);
+ //MOTOR 2 (LEFT)
  digitalRead(en4, OUTPUT);
- 
+ digitalRead(en5, OUTPUT);
+ analogRead(en6, OUTPUT);
 }
 
 void loop() {
@@ -29,22 +30,46 @@ void goStraight() {
   while(!blockCount)  {
 
     //ERROR CALCULATIONS
-    error = distanceRight() - distanceLeft(); //DIFFERENCE BETWEEN LEFT AND RIDE SIDE OF ROBOT IN CM
-
+    if(distanceRight() < 6 && distanceLeft() < 6)//Accounts for the robot being at an intersection
+      error = distanceRight() - distanceLeft(); //DIFFERENCE BETWEEN LEFT AND RIDE SIDE OF ROBOT IN CM
+    else
+        error = error
+      
     if((error + tollerence) < 0) {   //GO LEFT TO MAKE ERROR APPROACH ZERO. (TOLLERANCE OF 1CM)
 
-      //ADD CODE TO SLIGHTLY LEAD LEFT
+      //RIGHT MOTOR
+      digitalWrite(12, HIGH); //Establishes forward direction of Channel A
+      digitalWrite(9, LOW);   //Disengage the Brake for Channel A
+      analogWrite(3, 160);    //Sets speed fo the individual motor
+      
+      //LEFT MOTOR
+      digitalWrite(12, HIGH); //Establishes forward direction of Channel A
+      digitalWrite(9, LOW);   //Disengage the Brake for Channel A
+      analogWrite(3, 120);    //Sets speed fo the individual motor
       
     }else if((error - tollerence) >0) {    //GO RIGHT TO MAKE ERROR APPROACH ZERO. (TOLLERANCE OF 1CM)
-
-      //ADD CODE TO SLIGHTLY LEAD RIGHT
+      
+      //RIGHT MOTOR
+      digitalWrite(en1, HIGH);  //Establishes forward direction of Channel A
+      digitalWrite(en2, LOW);   //Disengage the Brake for Channel A
+      analogWrite(en3, 120);    //Sets speed fo the individual motor
+      
+      //LEFT MOTOR
+      digitalWrite(en4, HIGH);  //Establishes forward direction of Channel A
+      digitalWrite(en5, LOW);   //Disengage the Brake for Channel A
+      analogWrite(en6, 160);    //Sets speed fo the individual motor
       
     }else  {    //INSUFFICIENT ERROR CONTINUE GOING STRAIGHT
 
-      digitalWrite(en1, LOW);   //MOTOR 1 FORWARD
-      digitalWrite(en2, HIGH);
-      digitalWrite(en3, LOW);   //MOTOR 2 FORWARD
-      digitalWrite(en4, HIGH);
+      //RIGHT MOTOR
+      digitalWrite(en1, HIGH);  //Establishes forward direction of Channel A
+      digitalWrite(en2, LOW);   //Disengage the Brake for Channel A
+      analogWrite(en3, 160);    //Sets speed fo the individual motor
+      
+      //LEFT MOTOR
+      digitalWrite(en4, HIGH);  //Establishes forward direction of Channel A
+      digitalWrite(en5, LOW);   //Disengage the Brake for Channel A
+      analogWrite(en6, 160);    //Sets speed fo the individual motor
             
     }
   }
