@@ -2,6 +2,8 @@
 float error;
 float const tollerence = 1; //TOLLERENCE FOR SELF CORRECTION IN goStraight() METHOD. 
 
+int ESTOP = 7; //Number of cm that stops the car from hitting a wall (front sensor)
+
 void setup() {
   
  Serial.begin(9600);
@@ -27,7 +29,7 @@ void loop() {
 
 void goStraight() {
 
-  while(!blockCount)  {
+  while(!blockCount && distanceFront() < ESTOP)  {
 
     //ERROR CALCULATIONS
     if(distanceRight() < 6 && distanceLeft() < 6)//Accounts for the robot being at an intersection
@@ -38,14 +40,14 @@ void goStraight() {
     if((error + tollerence) < 0) {   //GO LEFT TO MAKE ERROR APPROACH ZERO. (TOLLERANCE OF 1CM)
 
       //RIGHT MOTOR
-      digitalWrite(12, HIGH); //Establishes forward direction of Channel A
-      digitalWrite(9, LOW);   //Disengage the Brake for Channel A
-      analogWrite(3, 160);    //Sets speed fo the individual motor
+      digitalWrite(en1, HIGH); //Establishes forward direction of Channel A
+      digitalWrite(en2, LOW);   //Disengage the Brake for Channel A
+      analogWrite(en3, 160);    //Sets speed fo the individual motor
       
       //LEFT MOTOR
-      digitalWrite(12, HIGH); //Establishes forward direction of Channel A
-      digitalWrite(9, LOW);   //Disengage the Brake for Channel A
-      analogWrite(3, 120);    //Sets speed fo the individual motor
+      digitalWrite(en4, HIGH); //Establishes forward direction of Channel A
+      digitalWrite(en5, LOW);   //Disengage the Brake for Channel A
+      analogWrite(en6, 120);    //Sets speed fo the individual motor
       
     }else if((error - tollerence) >0) {    //GO RIGHT TO MAKE ERROR APPROACH ZERO. (TOLLERANCE OF 1CM)
       
