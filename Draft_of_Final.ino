@@ -11,7 +11,16 @@
     int echoPin3 = 13;
 
   //Input from JeeNode Encoder
-    int blockCounter;
+    int blockCount = 1;
+
+  //Motor Shield Pins
+  int en1 = 1; //Right Motor Direction
+  int en2 = 1; //Right Motor Brake
+  int en3 = 1; //Right Motor Speed
+
+  int en4 = 1; //Left Motor Direction
+  int en5 = 1; //Left Motor Brake
+  int en6 = 1; //Left Motor Speed
     
 ////////////////////Go Straight Variables//////////////////////////////////////
 float error;
@@ -24,10 +33,6 @@ int ESTOP = 7; //Number of cm that stops the car from hitting a wall (front sens
 //mapRight, mapLeft, mapFront
 int distance = 10;
 
-///////////////////////GO STRAIGHT FUNCTION////////////////////////
-
-float error;
-float const tollerence = 1; //TOLLERENCE FOR SELF CORRECTION IN goStraight() METHOD.
 
 //////////////////////////DISTANCE FUNCTIONS////////////////////////////////////////
 
@@ -48,17 +53,17 @@ void setup() {
   Serial.begin(9600);  
   
  //ENCODER COUNTER FROM THE JEENODE
- digitalRead(blockCount, INPUT); 
+ pinMode(blockCount, INPUT); 
 
  //MOTOR 1 (RIGHT)
- digitalRead(en1, OUTPUT);  //Direction
- digitalRead(en2, OUTPUT);  //Brake
- analogRead(en3, OUTPUT);   //Speed
+ pinMode(en1, OUTPUT);  //Direction
+ pinMode(en2, OUTPUT);  //Brake
+ pinMode(en3, OUTPUT);   //Speed
  
  //MOTOR 2 (LEFT)
- digitalRead(en4, OUTPUT);  //Direction
- digitalRead(en5, OUTPUT);  //Brake
- analogRead(en6, OUTPUT);   //Speed
+ pinMode(en4, OUTPUT);  //Direction
+ pinMode(en5, OUTPUT);  //Brake
+ pinMode(en6, OUTPUT);   //Speed
 
 }
 
@@ -75,7 +80,7 @@ void goStraight() {
     if(distanceRight() < 6 && distanceLeft() < 6)//Accounts for the robot being at an intersection
       error = distanceRight() - distanceLeft(); //DIFFERENCE BETWEEN LEFT AND RIDE SIDE OF ROBOT IN CM
     else
-        error = error
+        error = error;
       
     if((error + tollerence) < 0) {   //GO LEFT TO MAKE ERROR APPROACH ZERO. (TOLLERANCE OF 1CM)
 
