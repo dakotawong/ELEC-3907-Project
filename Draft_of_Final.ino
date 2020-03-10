@@ -22,9 +22,9 @@
   int en5 = 1; //Left Motor Brake
   int en6 = 1; //Left Motor Speed
     
-  //Swicth 
-  int expIN = 1;
-  int expOUT = 1;
+  //Swicth 3 Way
+  int expON = 1;
+  int expOFF = 1;
 
   //Button
   int buttonPin = 1;
@@ -53,13 +53,6 @@ int maxCountValueCMRight, maxCountCMRight;
 long durationFront, cmFront, cm_for_Mode_Front [5];
 int maxCountValueCMFront, maxCountCMFront;
 
-////////////////////////////Switch and Button Variables////////////////////////////
-
-bool exploreMode;
-bool isOn;
-
-
-
 void setup() {
 
   Serial.begin(9600);  
@@ -78,8 +71,8 @@ void setup() {
  pinMode(en6, OUTPUT);   //Speed
   
   //Switch
-  pinMode(expIN);
-  pinMode(expOUT, OUTPUT);
+  pinMode(expON, INPUT);
+  pinMode(expOFF, INPUT);
   //Button
   pinMode(buttonPin, INPUT_PULLUP);
   
@@ -88,6 +81,17 @@ void setup() {
 void loop() {
   
 
+}
+
+bool exploreMODE()  {
+
+  if(digitalRead(expON))
+    return true;
+  else if(digitalRead(expOFF))
+    return false;
+  else
+    return false;
+  
 }
 
 void goStraight() {
