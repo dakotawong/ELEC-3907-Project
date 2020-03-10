@@ -53,7 +53,7 @@ void loop(){
   
        if(distancefront()==ESTOP){
       
-            if(distanceright()>(Error+distanceleft())){ //turn right 
+            if(distanceright()>(tollerence+distanceleft())){ //turn right 
 
                      while(distanceright()!=distanceleft())  //in a loop until left and right sensors are equal, therfore showing  theres no wall longer and its in go straight orientation
                        //right motor 
@@ -69,7 +69,7 @@ void loop(){
                       delay(1000)
                         }
 
-               else if(distanceleft()>(Error+distanceright()){ // turn Left
+               else if(distanceleft()>(tollerence+distanceright()){ // turn Left
                      //right motor 
                       while(distanceleft()!=distanceright()) // in a loop until left and right sensors are equal, therefore showing theres no wall longer and its in go straight orientation
                       digitalWrite(in1,LOW);
@@ -88,7 +88,7 @@ void loop(){
                    //case when FRONT DISTANCE  = ESTOP  i.e theres a wall in front,  and theres ALSO a dead end 
                    
                             //making both motors go back ward until Estop is false  
-                            while(frontdistance()<(ESTOP+distanceofoneblock)) { //runs until it leaves dead (assuming we make deadends one block deep)
+                            while(distancefront()<(ESTOP+distanceofoneblock)) { //runs until it leaves dead (assuming we make deadends one block deep)
                               
                             digitalWrite(in1,LOW);
                             digitalWrite(in2,HIGH);
