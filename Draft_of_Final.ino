@@ -22,6 +22,13 @@
   int en5 = 1; //Left Motor Brake
   int en6 = 1; //Left Motor Speed
     
+  //Swicth 
+  int expIN = 1;
+  int expOUT = 1;
+
+  //Button
+  int buttonPin = 1;
+
 ////////////////////Go Straight Variables//////////////////////////////////////
 float error;
 float const tollerence = 1; //TOLLERENCE FOR SELF CORRECTION IN goStraight() METHOD. 
@@ -46,6 +53,11 @@ int maxCountValueCMRight, maxCountCMRight;
 long durationFront, cmFront, cm_for_Mode_Front [5];
 int maxCountValueCMFront, maxCountCMFront;
 
+////////////////////////////Switch and Button Variables////////////////////////////
+
+bool exploreMode;
+bool isOn;
+
 
 
 void setup() {
@@ -64,7 +76,13 @@ void setup() {
  pinMode(en4, OUTPUT);  //Direction
  pinMode(en5, OUTPUT);  //Brake
  pinMode(en6, OUTPUT);   //Speed
-
+  
+  //Switch
+  pinMode(expIN);
+  pinMode(expOUT, OUTPUT);
+  //Button
+  pinMode(buttonPin, INPUT_PULLUP);
+  
 }
 
 void loop() {
