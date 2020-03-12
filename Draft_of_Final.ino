@@ -89,8 +89,18 @@ void setup() {
 }
 
 void loop() {
-  
+  while (isEnabled()) {
+   
+    //MAIN CODE HERE
+    
+  }
+}
 
+bool isEnabled()  {
+  if(!digitalRead(buttonPin))
+    return true;
+  else
+    return false;
 }
 
 bool exploreMODE()  {
