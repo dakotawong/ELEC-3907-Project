@@ -72,8 +72,9 @@ void setup() {
  pinMode(en6, OUTPUT);   //Speed
   
   //Switch
-  pinMode(expON, INPUT);
-  pinMode(expOFF, INPUT);
+  pinMode(explore, INPUT);
+  pinMode(goTo, INPUT);
+  piMode(off, INPUT);
   //Button
   pinMode(buttonPin, INPUT_PULLUP);
   
