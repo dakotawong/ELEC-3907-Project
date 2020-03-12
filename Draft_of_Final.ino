@@ -23,8 +23,9 @@
   int en6 = 1; //Left Motor Speed
     
   //Swicth 3 Way
-  int expON = 1;
-  int expOFF = 1;
+  int explore = 1;
+  int goTo = 1;
+  int off = 1
 
   //Button
   int buttonPin = 1;
@@ -85,13 +86,24 @@ void loop() {
 
 bool exploreMODE()  {
 
-  if(digitalRead(expON))
+  if(digitalRead(explore))
     return true;
-  else if(digitalRead(expOFF))
-    return false;
   else
     return false;
-  
+}
+
+bool isGoTo() {
+    if(digitalRead(goTo))
+      return true;
+    else
+      return false;
+}
+
+bool isOn() {
+    if(!digitalRead(off))
+      return true;
+    else
+      return off;
 }
 
 void goStraight() {
