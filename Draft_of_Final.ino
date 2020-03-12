@@ -78,6 +78,10 @@ void setup() {
   //Button
   pinMode(buttonPin, INPUT_PULLUP);
   
+  ////////////////TURN VARIABLES////////////////////
+  
+  turnTime = 1000; //Time the car turns for in milliseconds
+  
 }
 
 void loop() {
@@ -105,6 +109,38 @@ bool isOn() {
       return true;
     else
       return off;
+}
+
+void turnLeft() {
+  
+  //RIGHT MOTOR
+  digitalWrite(en1, HIGH); //Establishes forward direction of Channel A
+  digitalWrite(en2, LOW);   //Disengage the Brake for Channel A
+  analogWrite(en3, 160);    //Sets speed fo the individual motor
+      
+  //LEFT MOTOR
+  digitalWrite(en4, LOW); //Establishes forward direction of Channel A
+  digitalWrite(en5, LOW);   //Disengage the Brake for Channel A
+  analogWrite(en6, 160);    //Sets speed fo the individual motor
+  
+  delay(turnTime);  //Time the robot turns for
+  
+}
+
+void turnRight()  {
+ 
+  //RIGHT MOTOR
+  digitalWrite(en1, LOW); //Establishes forward direction of Channel A
+  digitalWrite(en2, LOW);   //Disengage the Brake for Channel A
+  analogWrite(en3, 160);    //Sets speed fo the individual motor
+      
+  //LEFT MOTOR
+  digitalWrite(en4, HIGH); //Establishes forward direction of Channel A
+  digitalWrite(en5, LOW);   //Disengage the Brake for Channel A
+  analogWrite(en6, 160);    //Sets speed fo the individual motor
+  
+  delay(turnTime);  //Time the robot turns for
+  
 }
 
 void goStraight() {
