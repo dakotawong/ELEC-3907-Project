@@ -112,7 +112,7 @@ bool isOn() {
     if(!digitalRead(off))
       return true;
     else
-      return off;
+      return false;
 }
 
 void turnAround() {
