@@ -178,7 +178,7 @@ void goStraight() {
     while(!blockCount && distanceFront() > ESTOP)  {
 
     //ERROR CALCULATIONS
-    if(distanceRight() < 6 && distanceLeft() < 6)//Accounts for the robot being at an intersection
+    if(distanceRight() < 8 && distanceLeft() < 8)//Accounts for the robot being at an intersection
       error = distanceRight() - distanceLeft(); //DIFFERENCE BETWEEN LEFT AND RIDE SIDE OF ROBOT IN CM
     else
         error = error;
