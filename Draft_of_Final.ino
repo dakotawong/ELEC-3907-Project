@@ -188,12 +188,12 @@ void goStraight() {
       //RIGHT MOTOR
       digitalWrite(en1, HIGH); //Establishes forward direction of Channel A
       digitalWrite(en2, LOW);   //Disengage the Brake for Channel A
-      analogWrite(en3, 160);    //Sets speed fo the individual motor
+      analogWrite(en3, 160);    //Sets speed of the individual motor
       
       //LEFT MOTOR
       digitalWrite(en4, HIGH); //Establishes forward direction of Channel A
       digitalWrite(en5, LOW);   //Disengage the Brake for Channel A
-      analogWrite(en6, 120);    //Sets speed fo the individual motor
+      analogWrite(en6, 120);    //Sets speed of the individual motor
       
       //ADD A DELAY
       
@@ -202,12 +202,12 @@ void goStraight() {
       //RIGHT MOTOR
       digitalWrite(en1, HIGH);  //Establishes forward direction of Channel A
       digitalWrite(en2, LOW);   //Disengage the Brake for Channel A
-      analogWrite(en3, 120);    //Sets speed fo the individual motor
+      analogWrite(en3, 120);    //Sets speed of the individual motor
       
       //LEFT MOTOR
       digitalWrite(en4, HIGH);  //Establishes forward direction of Channel A
       digitalWrite(en5, LOW);   //Disengage the Brake for Channel A
-      analogWrite(en6, 160);    //Sets speed fo the individual motor
+      analogWrite(en6, 160);    //Sets speed of the individual motor
       
       //ADD A DELAY
       
@@ -216,12 +216,12 @@ void goStraight() {
       //RIGHT MOTOR
       digitalWrite(en1, HIGH);  //Establishes forward direction of Channel A
       digitalWrite(en2, LOW);   //Disengage the Brake for Channel A
-      analogWrite(en3, 160);    //Sets speed fo the individual motor
+      analogWrite(en3, 160);    //Sets speed of the individual motor
       
       //LEFT MOTOR
       digitalWrite(en4, HIGH);  //Establishes forward direction of Channel A
       digitalWrite(en5, LOW);   //Disengage the Brake for Channel A
-      analogWrite(en6, 160);    //Sets speed fo the individual motor
+      analogWrite(en6, 160);    //Sets speed of the individual motor
       
       //ADD A DELAY
             
