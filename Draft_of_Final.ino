@@ -235,7 +235,7 @@ void goStraight() {
       
   //LEFT MOTOR
   digitalWrite(en4, HIGH);  //Establishes forward direction of Channel A
-  digitalWrite(en5, LOW);   //Engage the Brake for Channel A
+  digitalWrite(en5, HIGH);   //Engage the Brake for Channel A
   analogWrite(en6, 0);    //Sets speed fo the individual motor
   
 }
