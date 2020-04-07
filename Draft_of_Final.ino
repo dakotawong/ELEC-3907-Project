@@ -175,7 +175,7 @@ void turnRight()  {
 
 void goStraight() {
   
-    while(!blockCount && distanceFront() < ESTOP)  {
+    while(!blockCount && distanceFront() > ESTOP)  {
 
     //ERROR CALCULATIONS
     if(distanceRight() < 6 && distanceLeft() < 6)//Accounts for the robot being at an intersection
